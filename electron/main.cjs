@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, shell } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
 const { autoUpdater } = require("electron-updater");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
@@ -7,20 +7,46 @@ const path = require("node:path");
 
 let mainWindow;
 
+let skippedUpdateVersion = null;
+
 function configureAutoUpdates() {
   if (!app.isPackaged || process.env.MYRCON_DISABLE_AUTO_UPDATE === "1") {
     return;
   }
 
-  autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = false;
 
   autoUpdater.on("error", (error) => {
     console.warn("MyRcon updater error:", error);
+    mainWindow?.webContents.send("update:error", error instanceof Error ? error.message : String(error));
   });
 
-  autoUpdater.on("update-downloaded", () => {
-    console.info("MyRcon update downloaded. It will install after the app closes.");
+  autoUpdater.on("update-available", (info) => {
+    if (info.version === skippedUpdateVersion) {
+      return;
+    }
+    mainWindow?.webContents.send("update:available", { version: info.version });
+  });
+
+  autoUpdater.on("download-progress", (progress) => {
+    mainWindow?.webContents.send("update:download-progress", { percent: progress.percent });
+  });
+
+  autoUpdater.on("update-downloaded", (info) => {
+    mainWindow?.webContents.send("update:downloaded", { version: info.version });
+    autoUpdater.quitAndInstall();
+  });
+
+  ipcMain.on("update:install", () => {
+    autoUpdater.downloadUpdate().catch((error) => {
+      console.warn("MyRcon update download failed:", error);
+      mainWindow?.webContents.send("update:error", error instanceof Error ? error.message : String(error));
+    });
+  });
+
+  ipcMain.on("update:skip", (_event, version) => {
+    skippedUpdateVersion = version;
   });
 
   setTimeout(() => {
@@ -144,6 +170,7 @@ async function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
+      preload: path.join(__dirname, "preload.cjs"),
     },
   });
 
