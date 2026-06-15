@@ -433,7 +433,7 @@ export async function inferConnectionStatus(serverId: string) {
 export async function readServerStatus(server: ServerProfile) {
   let lastError: ReturnType<typeof buildRconErrorDetails> | undefined;
 
-  for (const command of ["status", "serverinfo"] as const) {
+  for (const command of ["serverinfo", "status"] as const) {
     try {
       const raw = await executeServerCommand(server, command);
       const parsed =
