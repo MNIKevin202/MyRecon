@@ -77,3 +77,13 @@ export const runCommandSchema = z.object({
   label: z.string().trim().max(120).optional().nullable(),
   savedCommandId: z.string().optional().nullable(),
 });
+
+const cronPattern = /^(\S+\s+){4}\S+$/;
+
+export const scheduledJobSchema = z.object({
+  serverId: z.string().min(1),
+  name: z.string().trim().min(1).max(120),
+  cron: z.string().trim().regex(cronPattern, "Cron must have 5 space-separated fields"),
+  command: z.string().trim().min(1).max(2000),
+  status: z.enum(["ENABLED", "DISABLED"]).default("ENABLED"),
+});

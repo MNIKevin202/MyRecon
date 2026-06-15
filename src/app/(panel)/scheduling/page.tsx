@@ -1,11 +1,13 @@
-import { ModulePlaceholder } from "@/components/module-placeholder";
+import { SchedulingClient } from "@/components/scheduling-client";
+import { prisma } from "@/lib/prisma";
 
-export default function SchedulingPage() {
-  return (
-    <ModulePlaceholder
-      title="Scheduling"
-      description="Scheduled command execution is represented in the schema and ready for a worker process."
-      items={["Automatic saves", "Restart announcements", "Server restarts", "Custom commands"]}
-    />
-  );
+export const dynamic = "force-dynamic";
+
+export default async function SchedulingPage() {
+  const servers = await prisma.serverProfile.findMany({
+    orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+    select: { id: true, name: true, isDefault: true },
+  });
+
+  return <SchedulingClient servers={servers} />;
 }
