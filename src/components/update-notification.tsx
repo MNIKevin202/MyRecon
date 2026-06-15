@@ -26,6 +26,7 @@ type UpdateState = {
   version: string;
   percent: number;
   message?: string;
+  isMac?: boolean;
 };
 
 const initialState: UpdateState = { status: "idle", version: "", percent: 0 };
@@ -47,7 +48,7 @@ export function UpdateNotification() {
         setState((current) => ({ ...current, status: "downloading", percent }));
       }),
       api.onUpdateDownloaded(({ version }) => {
-        setState({ status: "downloaded", version, percent: 100 });
+        setState({ status: "downloaded", version, percent: 100, isMac: navigator.userAgent.includes("Macintosh") });
       }),
       api.onUpdateError((message) => {
         setState({ status: "error", version: "", percent: 0, message });
@@ -107,9 +108,15 @@ export function UpdateNotification() {
       {state.status === "downloaded" && (
         <>
           <p className="text-sm font-semibold text-slate-100">Update {state.version} ready</p>
-          <p className="mt-1 text-xs text-slate-400">Restart the app to finish installing.</p>
+          <p className="mt-1 text-xs text-slate-400">
+            {state.isMac
+              ? "Download and install the new DMG from GitHub."
+              : "Restart the app to finish installing."}
+          </p>
           <div className="mt-3 flex justify-end">
-            <Button onClick={() => window.myrcon?.quitAndInstall()}>Restart & Install</Button>
+            <Button onClick={() => window.myrcon?.quitAndInstall()}>
+              {state.isMac ? "Open GitHub Releases" : "Restart & Install"}
+            </Button>
           </div>
         </>
       )}

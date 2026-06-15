@@ -55,7 +55,13 @@ function configureAutoUpdates() {
   });
 
   ipcMain.on("update:quit-and-install", () => {
-    autoUpdater.quitAndInstall(false, true);
+    if (process.platform === "darwin") {
+      // Squirrel.Mac requires a signed app to apply updates in-place.
+      // For unsigned builds, open the releases page so the user can download manually.
+      shell.openExternal("https://github.com/MNIKevin202/MyRecon/releases/latest");
+    } else {
+      autoUpdater.quitAndInstall(false, true);
+    }
   });
 
   ipcMain.on("update:install", () => {

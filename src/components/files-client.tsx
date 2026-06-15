@@ -116,7 +116,7 @@ export function FilesClient({ servers }: { servers: Server[] }) {
 
   const dropRef = useRef<HTMLDivElement>(null);
 
-  const load = useCallback(async (path = currentPath) => {
+  const load = useCallback(async (path: string) => {
     if (!serverId) return;
     setBusy(true);
     setError(null);
@@ -134,7 +134,7 @@ export function FilesClient({ servers }: { servers: Server[] }) {
     } finally {
       setBusy(false);
     }
-  }, [serverId, currentPath]);
+  }, [serverId]);
 
   useEffect(() => {
     if (!selected?.sftpRootPath) return;
@@ -144,7 +144,8 @@ export function FilesClient({ servers }: { servers: Server[] }) {
       void load(path);
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [selected?.id, selected?.sftpRootPath, load]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id, selected?.sftpRootPath]);
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) {
