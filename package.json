@@ -1,6 +1,6 @@
 {
   "name": "myrcon",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "Self-hosted Rust server administration panel",
   "author": "MyRcon",
   "repository": {
@@ -72,7 +72,8 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "differentialPackage": false
+      "differentialPackage": false,
+      "artifactName": "${productName}-Setup-${version}.${ext}"
     }
   },
   "dependencies": {
