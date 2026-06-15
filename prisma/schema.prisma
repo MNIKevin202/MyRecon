@@ -61,6 +61,7 @@ model ServerProfile {
   updatedAt             DateTime         @updatedAt
   quickActions          QuickAction[]
   commandCategories     CommandCategory[]
+  commandRuns           CommandRun[]
   serverEvents          ServerEvent[]
   scheduledJobs         ScheduledJob[]
   metrics               ServerMetric[]
@@ -160,6 +161,20 @@ model PluginPermissionAssignment {
 
   @@unique([serverId, permission, steamId])
   @@index([serverId, permission])
+}
+
+model CommandRun {
+  id             String        @id @default(cuid())
+  serverId       String
+  savedCommandId String?
+  command        String
+  label          String?
+  output         String?
+  success        Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  server         ServerProfile @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@index([serverId, createdAt])
 }
 
 model ServerPlayer {

@@ -57,3 +57,23 @@ export const sftpRenameSchema = z.object({
   oldPath: z.string().trim().min(1).max(2000),
   newPath: z.string().trim().min(1).max(2000),
 });
+
+export const categorySchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  serverId: z.string().optional().nullable(),
+});
+
+export const savedCommandSchema = z.object({
+  label: z.string().trim().min(1).max(120),
+  command: z.string().trim().min(1).max(2000),
+  categoryId: z.string().optional().nullable(),
+  dangerous: z.coerce.boolean().default(false),
+  requiresConfirm: z.coerce.boolean().default(false),
+});
+
+export const runCommandSchema = z.object({
+  serverId: z.string().min(1),
+  command: z.string().trim().min(1).max(2000),
+  label: z.string().trim().max(120).optional().nullable(),
+  savedCommandId: z.string().optional().nullable(),
+});

@@ -337,7 +337,7 @@ async function fetchUmodSearchPage(query: string, page: number) {
   const response = await fetch(`https://umod.org/plugins/search.json?${params.toString()}`, {
     headers: {
       Accept: "application/json",
-      "User-Agent": "MyRcon/0.1.6 (+https://example.invalid/myrcon)",
+      "User-Agent": "MyRcon/0.1.7 (+https://example.invalid/myrcon)",
     },
     cache: "no-store",
   });
@@ -442,7 +442,7 @@ export async function downloadUmodPlugin(url: string) {
   const response = await fetch(url, {
     headers: {
       Accept: "text/x-csharp,text/plain,*/*",
-      "User-Agent": "MyRcon/0.1.6 (+https://example.invalid/myrcon)",
+      "User-Agent": "MyRcon/0.1.7 (+https://example.invalid/myrcon)",
     },
     cache: "no-store",
   });
