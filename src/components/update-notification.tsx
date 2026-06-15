@@ -10,6 +10,7 @@ type UpdateApi = {
   onUpdateError: (callback: (message: string) => void) => () => void;
   installUpdate: () => void;
   skipUpdate: (version: string) => void;
+  quitAndInstall: () => void;
 };
 
 declare global {
@@ -105,8 +106,11 @@ export function UpdateNotification() {
 
       {state.status === "downloaded" && (
         <>
-          <p className="text-sm font-semibold text-slate-100">Installing update {state.version}</p>
-          <p className="mt-1 text-xs text-slate-400">MyRcon will restart to finish installing.</p>
+          <p className="text-sm font-semibold text-slate-100">Update {state.version} ready</p>
+          <p className="mt-1 text-xs text-slate-400">Restart the app to finish installing.</p>
+          <div className="mt-3 flex justify-end">
+            <Button onClick={() => window.myrcon?.quitAndInstall()}>Restart & Install</Button>
+          </div>
         </>
       )}
     </div>

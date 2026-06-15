@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Check, Pencil, Plus, Star, Trash2 } from "lucide-react";
 import { Button, Field, Input, Panel, Select } from "@/components/ui";
-import { api } from "@/lib/utils";
+import { api, clsx } from "@/lib/utils";
 
 type Server = {
   id: string;
@@ -44,8 +44,11 @@ const blank = {
   sftpAllowOutsideRoot: false,
 };
 
+type Tab = "saved" | "add";
+
 export function ServerManager({ initialServers }: { initialServers: Server[] }) {
   const [servers, setServers] = useState(initialServers);
+  const [tab, setTab] = useState<Tab>("saved");
   const [editing, setEditing] = useState<Server | null>(null);
   const [form, setForm] = useState(blank);
   const [message, setMessage] = useState<string | null>(null);
@@ -77,6 +80,14 @@ export function ServerManager({ initialServers }: { initialServers: Server[] }) 
       sftpAllowOutsideRoot: server.sftpAllowOutsideRoot,
     });
     setMessage(null);
+    setTab("add");
+  }
+
+  function cancelEdit() {
+    setEditing(null);
+    setForm(blank);
+    setMessage(null);
+    setTab("saved");
   }
 
   async function reload() {
@@ -99,6 +110,7 @@ export function ServerManager({ initialServers }: { initialServers: Server[] }) 
       setEditing(null);
       await reload();
       setMessage("Server profile saved.");
+      setTab("saved");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Save failed");
     } finally {
@@ -177,6 +189,11 @@ export function ServerManager({ initialServers }: { initialServers: Server[] }) 
     }
   }
 
+  const tabs: { id: Tab; label: string }[] = [
+    { id: "saved", label: "Saved Servers" },
+    { id: "add", label: editing ? "Edit Server" : "Add a Server" },
+  ];
+
   return (
     <div className="grid gap-6">
       <div>
@@ -184,90 +201,37 @@ export function ServerManager({ initialServers }: { initialServers: Server[] }) 
         <p className="mt-1 text-sm text-slate-400">Create and maintain unlimited Rust server profiles.</p>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
-        <Panel>
-          <div className="mb-4 flex items-center gap-2">
-            <Plus className="h-5 w-5 text-orange-300" />
-            <h2 className="text-lg font-semibold">{editing ? "Edit server" : "Add server"}</h2>
-          </div>
-          <div className="grid gap-4 md:grid-cols-2">
-            <Field label="Server name">
-              <Input value={form.name} onChange={(event) => update("name", event.target.value)} />
-            </Field>
-            <Field label="Host">
-              <Input value={form.host} onChange={(event) => update("host", event.target.value)} />
-            </Field>
-            <Field label="Game port">
-              <Input type="number" value={form.gamePort} onChange={(event) => update("gamePort", Number(event.target.value))} />
-            </Field>
-            <Field label="RCON port">
-              <Input type="number" value={form.rconPort} onChange={(event) => update("rconPort", Number(event.target.value))} />
-            </Field>
-            <Field label="RCON type">
-              <Select value={form.rconType} onChange={(event) => update("rconType", event.target.value)}>
-                <option value="WEBRCON">WebRCON</option>
-                <option value="EXPERIMENTAL">Experimental</option>
-                <option value="LEGACY">Legacy</option>
-              </Select>
-            </Field>
-            <Field label="RCON password" hint={editing ? "Leave blank to keep the existing encrypted password." : undefined}>
-              <Input type="password" value={form.rconPassword} onChange={(event) => update("rconPassword", event.target.value)} />
-            </Field>
-            <Field label="Notes">
-              <Input value={form.notes} onChange={(event) => update("notes", event.target.value)} />
-            </Field>
-          </div>
-          <div className="mt-5 flex flex-wrap gap-3">
-            <Button onClick={save} disabled={busy}>{busy ? "Saving..." : "Save server"}</Button>
-            {editing ? <Button variant="secondary" onClick={() => { setEditing(null); setForm(blank); }}>Cancel</Button> : null}
-          </div>
-          {message ? <div className="mt-4 rounded-md border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-slate-300">{message}</div> : null}
-        </Panel>
+      <div className="flex border-b border-white/10">
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => {
+              if (t.id === "saved" && editing) cancelEdit();
+              else setTab(t.id);
+            }}
+            className={clsx(
+              "px-5 py-2.5 text-sm font-medium transition",
+              tab === t.id
+                ? "border-b-2 border-orange-400 text-orange-100"
+                : "text-slate-400 hover:text-white",
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
 
-        <Panel>
-          <h2 className="text-lg font-semibold text-white">SFTP</h2>
-          <p className="mt-1 text-sm text-slate-400">Credentials are encrypted and never returned after saving.</p>
-          <div className="mt-4 grid gap-4 md:grid-cols-2">
-            <label className="flex items-center gap-2 text-sm text-slate-300">
-              <input type="checkbox" checked={form.sftpEnabled} onChange={(event) => update("sftpEnabled", event.target.checked)} />
-              Enable SFTP
-            </label>
-            <label className="flex items-center gap-2 text-sm text-slate-300">
-              <input type="checkbox" checked={!form.sftpAllowOutsideRoot} onChange={(event) => update("sftpAllowOutsideRoot", !event.target.checked)} />
-              Lock browsing to root path
-            </label>
-            <Field label="SFTP host">
-              <Input value={form.sftpHost} onChange={(event) => update("sftpHost", event.target.value)} placeholder="147.189.174.244" />
-            </Field>
-            <Field label="SFTP port">
-              <Input type="number" value={form.sftpPort} onChange={(event) => update("sftpPort", Number(event.target.value))} />
-            </Field>
-            <Field label="Username">
-              <Input value={form.sftpUsername} onChange={(event) => update("sftpUsername", event.target.value)} />
-            </Field>
-            <Field label="Password" hint="Leave blank to keep the saved password.">
-              <Input type="password" value={form.sftpPassword} onChange={(event) => update("sftpPassword", event.target.value)} />
-            </Field>
-            <Field label="Private key" hint="Optional. Leave blank to keep the saved key.">
-              <textarea className="min-h-24 rounded-md border border-white/10 bg-white/[0.04] p-3 text-sm text-slate-100 outline-none focus:border-orange-400" value={form.sftpPrivateKey} onChange={(event) => update("sftpPrivateKey", event.target.value)} />
-            </Field>
-            <Field label="Root path">
-              <Input value={form.sftpRootPath} onChange={(event) => update("sftpRootPath", event.target.value)} placeholder="C:/rustserver" />
-            </Field>
-            <Field label="Carbon plugins path">
-              <Input value={form.sftpDefaultPluginPath} onChange={(event) => update("sftpDefaultPluginPath", event.target.value)} placeholder="C:/rustserver/carbon/plugins" />
-            </Field>
-            <Field label="Carbon config path">
-              <Input value={form.sftpDefaultConfigPath} onChange={(event) => update("sftpDefaultConfigPath", event.target.value)} placeholder="C:/rustserver/carbon/config" />
-            </Field>
-          </div>
-          <div className="mt-5 flex flex-wrap gap-3">
-            <Button onClick={() => saveSftp()} disabled={busy}>Save SFTP</Button>
-            <Button variant="secondary" onClick={testSftp} disabled={busy}>Test SFTP Connection</Button>
-          </div>
-        </Panel>
+      {message ? (
+        <div className="rounded-md border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-slate-300">
+          {message}
+        </div>
+      ) : null}
 
+      {tab === "saved" && (
         <div className="grid gap-3">
+          {servers.length === 0 ? (
+            <p className="text-sm text-slate-500">No servers yet. Use the <button className="text-orange-300 underline" onClick={() => setTab("add")}>Add a Server</button> tab to get started.</p>
+          ) : null}
           {servers.map((server) => (
             <Panel key={server.id} className="p-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -289,8 +253,96 @@ export function ServerManager({ initialServers }: { initialServers: Server[] }) 
               </div>
             </Panel>
           ))}
+          <div className="pt-2">
+            <Button onClick={() => setTab("add")}><Plus className="h-4 w-4" />Add a Server</Button>
+          </div>
         </div>
-      </div>
+      )}
+
+      {tab === "add" && (
+        <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
+          <Panel>
+            <div className="mb-4 flex items-center gap-2">
+              <Plus className="h-5 w-5 text-orange-300" />
+              <h2 className="text-lg font-semibold">{editing ? "Edit server" : "Add server"}</h2>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label="Server name">
+                <Input value={form.name} onChange={(event) => update("name", event.target.value)} />
+              </Field>
+              <Field label="Host">
+                <Input value={form.host} onChange={(event) => update("host", event.target.value)} />
+              </Field>
+              <Field label="Game port">
+                <Input type="number" value={form.gamePort} onChange={(event) => update("gamePort", Number(event.target.value))} />
+              </Field>
+              <Field label="RCON port">
+                <Input type="number" value={form.rconPort} onChange={(event) => update("rconPort", Number(event.target.value))} />
+              </Field>
+              <Field label="RCON type">
+                <Select value={form.rconType} onChange={(event) => update("rconType", event.target.value)}>
+                  <option value="WEBRCON">WebRCON</option>
+                  <option value="EXPERIMENTAL">Experimental</option>
+                  <option value="LEGACY">Legacy</option>
+                </Select>
+              </Field>
+              <Field label="RCON password" hint={editing ? "Leave blank to keep the existing encrypted password." : undefined}>
+                <Input type="password" value={form.rconPassword} onChange={(event) => update("rconPassword", event.target.value)} />
+              </Field>
+              <Field label="Notes">
+                <Input value={form.notes} onChange={(event) => update("notes", event.target.value)} />
+              </Field>
+            </div>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <Button onClick={save} disabled={busy}>{busy ? "Saving..." : "Save server"}</Button>
+              <Button variant="secondary" onClick={cancelEdit}>Cancel</Button>
+            </div>
+          </Panel>
+
+          <Panel>
+            <h2 className="text-lg font-semibold text-white">SFTP</h2>
+            <p className="mt-1 text-sm text-slate-400">Credentials are encrypted and never returned after saving.</p>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <label className="flex items-center gap-2 text-sm text-slate-300">
+                <input type="checkbox" checked={form.sftpEnabled} onChange={(event) => update("sftpEnabled", event.target.checked)} />
+                Enable SFTP
+              </label>
+              <label className="flex items-center gap-2 text-sm text-slate-300">
+                <input type="checkbox" checked={!form.sftpAllowOutsideRoot} onChange={(event) => update("sftpAllowOutsideRoot", !event.target.checked)} />
+                Lock browsing to root path
+              </label>
+              <Field label="SFTP host">
+                <Input value={form.sftpHost} onChange={(event) => update("sftpHost", event.target.value)} placeholder="147.189.174.244" />
+              </Field>
+              <Field label="SFTP port">
+                <Input type="number" value={form.sftpPort} onChange={(event) => update("sftpPort", Number(event.target.value))} />
+              </Field>
+              <Field label="Username">
+                <Input value={form.sftpUsername} onChange={(event) => update("sftpUsername", event.target.value)} />
+              </Field>
+              <Field label="Password" hint="Leave blank to keep the saved password.">
+                <Input type="password" value={form.sftpPassword} onChange={(event) => update("sftpPassword", event.target.value)} />
+              </Field>
+              <Field label="Private key" hint="Optional. Leave blank to keep the saved key.">
+                <textarea className="min-h-24 rounded-md border border-white/10 bg-white/[0.04] p-3 text-sm text-slate-100 outline-none focus:border-orange-400" value={form.sftpPrivateKey} onChange={(event) => update("sftpPrivateKey", event.target.value)} />
+              </Field>
+              <Field label="Root path">
+                <Input value={form.sftpRootPath} onChange={(event) => update("sftpRootPath", event.target.value)} placeholder="C:/rustserver" />
+              </Field>
+              <Field label="Carbon plugins path">
+                <Input value={form.sftpDefaultPluginPath} onChange={(event) => update("sftpDefaultPluginPath", event.target.value)} placeholder="C:/rustserver/carbon/plugins" />
+              </Field>
+              <Field label="Carbon config path">
+                <Input value={form.sftpDefaultConfigPath} onChange={(event) => update("sftpDefaultConfigPath", event.target.value)} placeholder="C:/rustserver/carbon/config" />
+              </Field>
+            </div>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <Button onClick={() => saveSftp()} disabled={busy}>Save SFTP</Button>
+              <Button variant="secondary" onClick={testSftp} disabled={busy}>Test SFTP Connection</Button>
+            </div>
+          </Panel>
+        </div>
+      )}
     </div>
   );
 }

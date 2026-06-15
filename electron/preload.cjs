@@ -13,4 +13,5 @@ contextBridge.exposeInMainWorld("myrcon", {
   onUpdateError: (callback) => subscribe("update:error", callback),
   installUpdate: () => ipcRenderer.send("update:install"),
   skipUpdate: (version) => ipcRenderer.send("update:skip", version),
+  quitAndInstall: () => ipcRenderer.send("update:quit-and-install"),
 });

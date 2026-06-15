@@ -52,7 +52,10 @@ function configureAutoUpdates() {
 
   autoUpdater.on("update-downloaded", (info) => {
     mainWindow?.webContents.send("update:downloaded", { version: info.version });
-    autoUpdater.quitAndInstall();
+  });
+
+  ipcMain.on("update:quit-and-install", () => {
+    autoUpdater.quitAndInstall(false, true);
   });
 
   ipcMain.on("update:install", () => {
