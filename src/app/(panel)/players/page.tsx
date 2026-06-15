@@ -1,0 +1,13 @@
+import { PlayersClient } from "@/components/players-client";
+import { prisma } from "@/lib/prisma";
+
+export const dynamic = "force-dynamic";
+
+export default async function PlayersPage() {
+  const servers = await prisma.serverProfile.findMany({
+    orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+    select: { id: true, name: true, isDefault: true },
+  });
+
+  return <PlayersClient servers={servers} />;
+}

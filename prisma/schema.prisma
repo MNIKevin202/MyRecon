@@ -1,0 +1,192 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  passwordHash String
+  role         String    @default("OWNER")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  sessions     Session[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model LoginAttempt {
+  id        String   @id @default(cuid())
+  email     String
+  ip        String
+  success   Boolean
+  createdAt DateTime @default(now())
+
+  @@index([email, ip, createdAt])
+}
+
+model ServerProfile {
+  id                    String           @id @default(cuid())
+  name                  String
+  host                  String
+  gamePort              Int
+  rconPort              Int
+  rconType              String           @default("WEBRCON")
+  encryptedRconPassword String
+  sftpEnabled           Boolean          @default(false)
+  sftpHost              String?
+  sftpPort              Int              @default(22)
+  sftpUsername          String?
+  sftpPasswordEncrypted String?
+  sftpPrivateKeyEncrypted String?
+  sftpRootPath          String?
+  sftpDefaultPluginPath String?
+  sftpDefaultConfigPath String?
+  sftpAllowOutsideRoot  Boolean          @default(false)
+  notes                 String?
+  isDefault             Boolean          @default(false)
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  quickActions          QuickAction[]
+  commandCategories     CommandCategory[]
+  serverEvents          ServerEvent[]
+  scheduledJobs         ScheduledJob[]
+  metrics               ServerMetric[]
+  pluginPermissionAssignments PluginPermissionAssignment[]
+  players               ServerPlayer[]
+}
+
+model QuickAction {
+  id          String        @id @default(cuid())
+  serverId    String?
+  label       String
+  command     String
+  icon        String?
+  requiresConfirm Boolean   @default(false)
+  createdAt   DateTime      @default(now())
+  server      ServerProfile? @relation(fields: [serverId], references: [id], onDelete: Cascade)
+}
+
+model CommandCategory {
+  id        String          @id @default(cuid())
+  serverId  String?
+  name      String
+  commands  SavedCommand[]
+  server    ServerProfile?  @relation(fields: [serverId], references: [id], onDelete: Cascade)
+}
+
+model SavedCommand {
+  id                String          @id @default(cuid())
+  categoryId        String?
+  label             String
+  command           String
+  dangerous         Boolean         @default(false)
+  requiresConfirm   Boolean         @default(false)
+  createdAt         DateTime        @default(now())
+  category          CommandCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+}
+
+model ScheduledJob {
+  id          String             @id @default(cuid())
+  serverId    String
+  name        String
+  cron        String
+  command     String
+  status      String             @default("ENABLED")
+  lastRunAt   DateTime?
+  nextRunAt   DateTime?
+  createdAt   DateTime           @default(now())
+  server      ServerProfile      @relation(fields: [serverId], references: [id], onDelete: Cascade)
+}
+
+model ServerEvent {
+  id        String        @id @default(cuid())
+  serverId  String
+  level     String        @default("info")
+  source    String        @default("system")
+  message   String
+  createdAt DateTime      @default(now())
+  server    ServerProfile @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@index([serverId, createdAt])
+}
+
+model ServerMetric {
+  id          String        @id @default(cuid())
+  serverId    String
+  cpu         Float?
+  memoryMb    Float?
+  networkInKb Float?
+  networkOutKb Float?
+  fps         Float?
+  players     Int?
+  createdAt   DateTime      @default(now())
+  server      ServerProfile @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@index([serverId, createdAt])
+}
+
+model AppSetting {
+  key       String   @id
+  value     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model PluginPermissionAssignment {
+  id         String        @id @default(cuid())
+  serverId   String
+  pluginName String?
+  permission String
+  framework  String        @default("CARBON")
+  steamId    String
+  playerName String?
+  source     String        @default("MYRCON")
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  server     ServerProfile @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@unique([serverId, permission, steamId])
+  @@index([serverId, permission])
+}
+
+model ServerPlayer {
+  id                   String        @id @default(cuid())
+  serverId             String
+  steamId              String
+  name                 String
+  aliasesJson          String?
+  online               Boolean       @default(false)
+  source               String        @default("MYRCON")
+  firstSeenAt          DateTime      @default(now())
+  lastSeenAt           DateTime      @default(now())
+  lastConnectedAt      DateTime?
+  lastDisconnectedAt   DateTime?
+  timesSeen            Int           @default(1)
+  lastPing             Int?
+  bestPing             Int?
+  lastAddress          String?
+  lastConnectedSeconds Int?
+  maxConnectedSeconds  Int?
+  violationLevel       Int?
+  rawJson              String?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  server               ServerProfile @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@unique([serverId, steamId])
+  @@index([serverId, online])
+  @@index([serverId, lastSeenAt])
+}

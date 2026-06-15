@@ -1,0 +1,15 @@
+services:
+  myrcon:
+    build: .
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: "file:/app/data/myrcon.db"
+    volumes:
+      - myrcon-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  myrcon-data:

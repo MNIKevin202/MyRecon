@@ -1,0 +1,10 @@
+ALTER TABLE "ServerProfile" ADD COLUMN "sftpEnabled" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "ServerProfile" ADD COLUMN "sftpHost" TEXT;
+ALTER TABLE "ServerProfile" ADD COLUMN "sftpPort" INTEGER NOT NULL DEFAULT 22;
+ALTER TABLE "ServerProfile" ADD COLUMN "sftpUsername" TEXT;
+ALTER TABLE "ServerProfile" ADD COLUMN "sftpPasswordEncrypted" TEXT;
+ALTER TABLE "ServerProfile" ADD COLUMN "sftpPrivateKeyEncrypted" TEXT;
+ALTER TABLE "ServerProfile" ADD COLUMN "sftpRootPath" TEXT;
+ALTER TABLE "ServerProfile" ADD COLUMN "sftpDefaultPluginPath" TEXT;
+ALTER TABLE "ServerProfile" ADD COLUMN "sftpDefaultConfigPath" TEXT;
+ALTER TABLE "ServerProfile" ADD COLUMN "sftpAllowOutsideRoot" BOOLEAN NOT NULL DEFAULT false;

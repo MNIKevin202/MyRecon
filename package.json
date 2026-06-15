@@ -1,26 +1,107 @@
 {
-  "name": "myrcon-scaffold",
-  "version": "0.1.0",
+  "name": "myrcon",
+  "version": "0.1.6",
+  "description": "Self-hosted Rust server administration panel",
+  "author": "MyRcon",
+  "repository": {
+    "type": "git",
+    "url": "https://example.invalid/myrcon.git"
+  },
   "private": true,
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:init-sqlite": "tsx scripts/init-sqlite.ts",
+    "db:studio": "prisma studio",
+    "electron:dev": "set MYRCON_DEV_SERVER_URL=http://127.0.0.1:3000&& electron .",
+    "desktop:clean": "node scripts/clean-release.cjs",
+    "desktop:prepare": "node scripts/prepare-electron.cjs",
+    "desktop:pack": "npm run desktop:clean && npm run build && npm run desktop:prepare && electron-builder --win --dir --publish never",
+    "desktop:installer": "npm run desktop:clean && npm run build && npm run desktop:prepare && electron-builder --win nsis --publish never",
+    "desktop:dmg": "npm run desktop:clean && npm run build && npm run desktop:prepare && electron-builder --mac dmg --publish never",
+    "postinstall": "prisma generate"
+  },
+  "build": {
+    "appId": "com.myrcon.panel",
+    "productName": "MyRcon",
+    "directories": {
+      "output": "release"
+    },
+    "npmRebuild": false,
+    "asar": true,
+    "compression": "store",
+    "files": [
+      "electron/**/*",
+      ".next/standalone/**/*",
+      ".next/static/**/*",
+      "public/**/*",
+      "prisma/migrations/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      ".next/standalone/**/*",
+      "prisma/migrations/**/*"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.developer-tools"
+    },
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://example.invalid/myrcon/"
+      }
+    ],
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "differentialPackage": false
+    }
   },
   "dependencies": {
+    "@prisma/client": "5.22.0",
+    "bcryptjs": "^3.0.3",
+    "date-fns": "^4.4.0",
+    "jose": "^6.2.3",
+    "lucide-react": "^1.18.0",
     "next": "16.2.9",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "recharts": "^3.8.1",
+    "ssh2-sftp-client": "^12.1.1",
+    "ws": "^8.21.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/ssh2-sftp-client": "^9.0.6",
+    "@types/ws": "^8.18.1",
+    "electron": "^42.4.0",
+    "electron-builder": "^26.15.3",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
+    "prisma": "5.22.0",
     "tailwindcss": "^4",
+    "tsx": "^4.22.4",
     "typescript": "^5"
   }
 }
