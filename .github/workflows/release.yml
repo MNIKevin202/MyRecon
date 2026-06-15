@@ -19,11 +19,9 @@ jobs:
           - name: Windows
             os: windows-latest
             command: npm run desktop:installer
-            artifact: release/MyRcon Setup *.exe
           - name: macOS
             os: macos-latest
             command: npm run desktop:dmg
-            artifact: release/*.dmg
 
     steps:
       - name: Check out source
@@ -47,7 +45,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: MyRcon-${{ matrix.platform.name }}
-          path: ${{ matrix.platform.artifact }}
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.zip
+            release/*.yml
+            release/*.blockmap
           if-no-files-found: error
 
   publish:

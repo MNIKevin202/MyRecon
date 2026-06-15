@@ -1,10 +1,34 @@
 const { app, BrowserWindow, dialog, shell } = require("electron");
+const { autoUpdater } = require("electron-updater");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const net = require("node:net");
 const path = require("node:path");
 
 let mainWindow;
+
+function configureAutoUpdates() {
+  if (!app.isPackaged || process.env.MYRCON_DISABLE_AUTO_UPDATE === "1") {
+    return;
+  }
+
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on("error", (error) => {
+    console.warn("MyRcon updater error:", error);
+  });
+
+  autoUpdater.on("update-downloaded", () => {
+    console.info("MyRcon update downloaded. It will install after the app closes.");
+  });
+
+  setTimeout(() => {
+    autoUpdater.checkForUpdates().catch((error) => {
+      console.warn("MyRcon update check failed:", error);
+    });
+  }, 10000);
+}
 
 function ensureSecret(filePath) {
   if (fs.existsSync(filePath)) {
@@ -131,11 +155,14 @@ async function createWindow() {
   await mainWindow.loadURL(url);
 }
 
-app.whenReady().then(() => {
-  createWindow().catch((error) => {
+app.whenReady().then(async () => {
+  try {
+    await createWindow();
+    configureAutoUpdates();
+  } catch (error) {
     dialog.showErrorBox("MyRcon failed to start", error instanceof Error ? error.message : String(error));
     app.quit();
-  });
+  }
 });
 
 app.on("window-all-closed", () => {
