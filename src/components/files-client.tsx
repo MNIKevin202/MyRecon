@@ -1,10 +1,25 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Copy, FileText, Folder, RefreshCw, Save, Upload } from "lucide-react";
+import {
+  ChevronRight,
+  Copy,
+  File,
+  FilePlus,
+  FileText,
+  Folder,
+  FolderOpen,
+  FolderPlus,
+  Pencil,
+  RefreshCw,
+  Save,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
 import { Button, Input, Panel, Select } from "@/components/ui";
-import { api } from "@/lib/utils";
+import { api, clsx } from "@/lib/utils";
 
 type Server = {
   id: string;
@@ -36,42 +51,86 @@ type SftpError = {
   stack?: string;
 };
 
-function parentPath(path: string) {
-  const clean = path.replace(/\\/g, "/").replace(/\/$/, "");
-  const index = clean.lastIndexOf("/");
-  if (index <= 0) return clean;
-  return clean.slice(0, index);
-}
+type SortKey = "name" | "size" | "modified";
+type SortDir = "asc" | "desc";
 
 function joinPath(dir: string, name: string) {
   return `${dir.replace(/\/$/, "")}/${name}`.replace(/\/+/g, "/");
 }
 
+function formatSize(bytes: number) {
+  if (bytes === 0) return "—";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatDate(ts: number) {
+  if (!ts) return "—";
+  return new Date(ts * 1000).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function breadcrumbs(path: string) {
+  const clean = path.replace(/\\/g, "/");
+  const parts = clean.split("/").filter(Boolean);
+  const crumbs: { label: string; path: string }[] = [];
+  for (let i = 0; i < parts.length; i++) {
+    crumbs.push({ label: parts[i], path: "/" + parts.slice(0, i + 1).join("/") });
+  }
+  return crumbs;
+}
+
+function fileIcon(entry: Entry) {
+  if (entry.type === "directory") return <Folder className="h-4 w-4 shrink-0 text-orange-300" />;
+  const ext = entry.name.split(".").pop()?.toLowerCase() ?? "";
+  if (["cs", "js", "ts", "json", "cfg", "ini", "txt", "log", "xml", "yaml", "yml"].includes(ext)) {
+    return <FileText className="h-4 w-4 shrink-0 text-blue-300" />;
+  }
+  return <File className="h-4 w-4 shrink-0 text-slate-400" />;
+}
+
 export function FilesClient({ servers }: { servers: Server[] }) {
-  const defaultServer = servers.find((server) => server.isDefault) ?? servers[0];
+  const defaultServer = servers.find((s) => s.isDefault) ?? servers[0];
   const [serverId, setServerId] = useState(defaultServer?.id ?? "");
-  const selected = useMemo(() => servers.find((server) => server.id === serverId), [serverId, servers]);
+  const selected = useMemo(() => servers.find((s) => s.id === serverId), [serverId, servers]);
+
   const [currentPath, setCurrentPath] = useState(defaultServer?.sftpRootPath ?? "");
   const [entries, setEntries] = useState<Entry[]>([]);
   const [filter, setFilter] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("name");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<SftpError | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [dragging, setDragging] = useState(false);
+
   const [editingPath, setEditingPath] = useState<string | null>(null);
   const [editorContent, setEditorContent] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [editorBusy, setEditorBusy] = useState(false);
+
+  const dropRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async (path = currentPath) => {
     if (!serverId) return;
     setBusy(true);
     setError(null);
+    setFilter("");
     try {
-      const data = await api<{ path: string; entries: Entry[] }>(`/api/servers/${serverId}/sftp/list?path=${encodeURIComponent(path)}`);
+      const data = await api<{ path: string; entries: Entry[] }>(
+        `/api/servers/${serverId}/sftp/list?path=${encodeURIComponent(path)}`,
+      );
       setCurrentPath(data.path);
       setEntries(data.entries);
     } catch (err) {
-      const apiError = err as Error & { details?: SftpError };
-      setError(apiError.details ?? null);
-      setNotice(apiError.message);
+      const e = err as Error & { details?: SftpError };
+      setError(e.details ?? null);
+      setNotice(e.message);
     } finally {
       setBusy(false);
     }
@@ -79,54 +138,59 @@ export function FilesClient({ servers }: { servers: Server[] }) {
 
   useEffect(() => {
     if (!selected?.sftpRootPath) return;
-    const targetPath = selected.sftpRootPath;
+    const path = selected.sftpRootPath;
     const timer = window.setTimeout(() => {
-      setCurrentPath(targetPath);
-      void load(targetPath);
+      setCurrentPath(path);
+      void load(path);
     }, 0);
     return () => window.clearTimeout(timer);
   }, [selected?.id, selected?.sftpRootPath, load]);
 
-  const filtered = entries.filter((entry) => entry.name.toLowerCase().includes(filter.toLowerCase()));
-
-  function errorText(details: SftpError) {
-    return [
-      `Timestamp: ${details.timestamp}`,
-      `Server: ${details.serverName}`,
-      `SFTP host: ${details.host}`,
-      `SFTP port: ${details.port}`,
-      `Username: ${details.username}`,
-      details.requestedPath ? `Requested path: ${details.requestedPath}` : null,
-      `Operation: ${details.operation}`,
-      `Error: ${details.message}`,
-      details.stack ? `Stack:\n${details.stack}` : null,
-    ].filter(Boolean).join("\n");
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
   }
 
-  async function copyError() {
-    if (!error) return;
-    await navigator.clipboard.writeText(errorText(error));
-    setNotice("SFTP error copied");
-  }
+  const sorted = useMemo(() => {
+    const dirs = entries.filter((e) => e.type === "directory");
+    const files = entries.filter((e) => e.type === "file");
+
+    function cmp(a: Entry, b: Entry) {
+      let result = 0;
+      if (sortKey === "name") result = a.name.localeCompare(b.name);
+      else if (sortKey === "size") result = a.size - b.size;
+      else result = a.modifyTime - b.modifyTime;
+      return sortDir === "asc" ? result : -result;
+    }
+
+    const filtered = (list: Entry[]) =>
+      list.filter((e) => e.name.toLowerCase().includes(filter.toLowerCase())).sort(cmp);
+
+    return [...filtered(dirs), ...filtered(files)];
+  }, [entries, filter, sortKey, sortDir]);
 
   async function readFile(path: string) {
     setBusy(true);
     setError(null);
     try {
-      const data = await api<{ path: string; tooLarge: boolean; size: number; content: string }>(`/api/servers/${serverId}/sftp/read`, {
-        method: "POST",
-        body: JSON.stringify({ path }),
-      });
+      const data = await api<{ path: string; tooLarge: boolean; content: string }>(
+        `/api/servers/${serverId}/sftp/read`,
+        { method: "POST", body: JSON.stringify({ path }) },
+      );
       if (data.tooLarge) {
-        setNotice("This file is large. Download instead?");
+        setNotice("File is too large to edit in-browser.");
         return;
       }
       setEditingPath(data.path);
       setEditorContent(data.content);
     } catch (err) {
-      const apiError = err as Error & { details?: SftpError };
-      setError(apiError.details ?? null);
-      setNotice(apiError.message);
+      const e = err as Error & { details?: SftpError };
+      setError(e.details ?? null);
+      setNotice(e.message);
     } finally {
       setBusy(false);
     }
@@ -134,29 +198,38 @@ export function FilesClient({ servers }: { servers: Server[] }) {
 
   async function saveFile() {
     if (!editingPath) return;
-    await api(`/api/servers/${serverId}/sftp/write`, {
-      method: "POST",
-      body: JSON.stringify({ path: editingPath, content: editorContent }),
-    });
-    setNotice("File saved");
-    await load(currentPath);
+    setEditorBusy(true);
+    try {
+      await api(`/api/servers/${serverId}/sftp/write`, {
+        method: "POST",
+        body: JSON.stringify({ path: editingPath, content: editorContent }),
+      });
+      setNotice("File saved.");
+      await load(currentPath);
+    } catch (err) {
+      setNotice((err as Error).message);
+    } finally {
+      setEditorBusy(false);
+    }
   }
 
-  async function upload(file: File | undefined) {
-    if (!file) return;
+  async function uploadFile(file: File) {
     const form = new FormData();
     form.set("path", currentPath);
     form.set("file", file);
+    setBusy(true);
     try {
-      const result = await fetch(`/api/servers/${serverId}/sftp/upload`, { method: "POST", body: form });
-      const data = await result.json();
-      if (!result.ok) throw Object.assign(new Error(data.error ?? "Upload failed"), { details: data.details });
-      setNotice(data.pluginHint ?? "File uploaded");
+      const res = await fetch(`/api/servers/${serverId}/sftp/upload`, { method: "POST", body: form });
+      const data = await res.json();
+      if (!res.ok) throw Object.assign(new Error(data.error ?? "Upload failed"), { details: data.details });
+      setNotice(data.pluginHint ?? `Uploaded ${file.name}`);
       await load(currentPath);
     } catch (err) {
-      const apiError = err as Error & { details?: SftpError };
-      setError(apiError.details ?? null);
-      setNotice(apiError.message);
+      const e = err as Error & { details?: SftpError };
+      setError(e.details ?? null);
+      setNotice(e.message);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -170,7 +243,7 @@ export function FilesClient({ servers }: { servers: Server[] }) {
     await load(currentPath);
   }
 
-  async function createTextFile() {
+  async function createFile() {
     const name = window.prompt("File name");
     if (!name) return;
     const path = joinPath(currentPath, name);
@@ -181,56 +254,69 @@ export function FilesClient({ servers }: { servers: Server[] }) {
     await readFile(path);
   }
 
-  async function remove(path: string) {
-    if (!window.confirm(`Delete ${path}?`)) return;
+  async function remove(entry: Entry) {
+    if (!window.confirm(`Delete ${entry.name}?`)) return;
     await api(`/api/servers/${serverId}/sftp/delete`, {
       method: "POST",
-      body: JSON.stringify({ path }),
+      body: JSON.stringify({ path: entry.path }),
     });
     await load(currentPath);
   }
 
-  async function rename(path: string) {
-    const newPath = window.prompt("New path", path);
-    if (!newPath || newPath === path) return;
+  async function rename(entry: Entry) {
+    const newPath = window.prompt("New path", entry.path);
+    if (!newPath || newPath === entry.path) return;
     await api(`/api/servers/${serverId}/sftp/rename`, {
       method: "POST",
-      body: JSON.stringify({ oldPath: path, newPath }),
+      body: JSON.stringify({ oldPath: entry.path, newPath }),
     });
     await load(currentPath);
   }
 
-  async function runCommand(command: string) {
-    await api(`/api/servers/${serverId}/console`, {
-      method: "POST",
-      body: JSON.stringify({ command }),
-    });
-    setNotice(`Ran ${command}`);
+  function onDragOver(event: React.DragEvent) {
+    event.preventDefault();
+    setDragging(true);
   }
 
+  function onDragLeave(event: React.DragEvent) {
+    if (!dropRef.current?.contains(event.relatedTarget as Node)) setDragging(false);
+  }
+
+  function onDrop(event: React.DragEvent) {
+    event.preventDefault();
+    setDragging(false);
+    const file = event.dataTransfer.files?.[0];
+    if (file) uploadFile(file);
+  }
+
+  const crumbs = breadcrumbs(currentPath);
+
   const quickPaths = [
-    ["Root", selected?.sftpRootPath],
-    ["Carbon Plugins", selected?.sftpDefaultPluginPath],
-    ["Carbon Config", selected?.sftpDefaultConfigPath],
-    ["Oxide Plugins", selected?.sftpRootPath ? joinPath(selected.sftpRootPath, "oxide/plugins") : ""],
-    ["Oxide Config", selected?.sftpRootPath ? joinPath(selected.sftpRootPath, "oxide/config") : ""],
-    ["Server Config", selected?.sftpRootPath ? joinPath(selected.sftpRootPath, "server") : ""],
-    ["Logs", selected?.sftpRootPath ? joinPath(selected.sftpRootPath, "logs") : ""],
-    ["Backups", selected?.sftpRootPath ? joinPath(selected.sftpRootPath, "backups") : ""],
-  ] as const;
+    { label: "Root", path: selected?.sftpRootPath },
+    { label: "Carbon Plugins", path: selected?.sftpDefaultPluginPath },
+    { label: "Carbon Config", path: selected?.sftpDefaultConfigPath },
+    { label: "Oxide Plugins", path: selected?.sftpRootPath ? joinPath(selected.sftpRootPath, "oxide/plugins") : null },
+    { label: "Oxide Config", path: selected?.sftpRootPath ? joinPath(selected.sftpRootPath, "oxide/config") : null },
+    { label: "Server Config", path: selected?.sftpRootPath ? joinPath(selected.sftpRootPath, "server") : null },
+    { label: "Logs", path: selected?.sftpRootPath ? joinPath(selected.sftpRootPath, "logs") : null },
+    { label: "Backups", path: selected?.sftpRootPath ? joinPath(selected.sftpRootPath, "backups") : null },
+  ].filter((q) => !!q.path) as { label: string; path: string }[];
 
   return (
     <div className="grid min-w-0 gap-6">
+      {/* Header */}
       <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Files</h1>
-          <p className="mt-1 text-sm text-slate-400">Manage Rust server files over server-side SFTP.</p>
+          <p className="mt-1 text-sm text-slate-400">Manage Rust server files over SFTP.</p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <Select value={serverId} onChange={(event) => setServerId(event.target.value)} className="min-w-56">
-            {servers.map((server) => <option key={server.id} value={server.id}>{server.name}</option>)}
+          <Select value={serverId} onChange={(e) => setServerId(e.target.value)} className="min-w-56">
+            {servers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </Select>
-          <Button variant="secondary" onClick={() => load(currentPath)} disabled={busy}><RefreshCw className="h-4 w-4" />Refresh</Button>
+          <Button variant="secondary" onClick={() => load(currentPath)} disabled={busy}>
+            <RefreshCw className={clsx("h-4 w-4", busy && "animate-spin")} />Refresh
+          </Button>
         </div>
       </div>
 
@@ -238,10 +324,8 @@ export function FilesClient({ servers }: { servers: Server[] }) {
         <Panel>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-base font-semibold text-white">SFTP is disabled in this MyRcon profile</h2>
-              <p className="mt-1 text-sm text-slate-400">
-                FileZilla can still work while MyRcon is disabled. Edit this server, check Enable SFTP, then Save SFTP or Test SFTP Connection.
-              </p>
+              <h2 className="text-base font-semibold text-white">SFTP is not enabled for this server</h2>
+              <p className="mt-1 text-sm text-slate-400">Go to Servers, edit this profile, and enable SFTP.</p>
             </div>
             <Link className="inline-flex h-10 items-center justify-center rounded-md border border-white/10 px-4 text-sm font-semibold text-slate-100 hover:bg-white/[0.08]" href="/servers">
               Open Servers
@@ -249,77 +333,205 @@ export function FilesClient({ servers }: { servers: Server[] }) {
           </div>
         </Panel>
       ) : null}
-      {notice ? <div className="rounded-md border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-slate-200">{notice}</div> : null}
+
+      {notice ? (
+        <div className="flex items-center justify-between rounded-md border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-slate-200">
+          <span>{notice}</span>
+          <button onClick={() => setNotice(null)} className="ml-3 text-slate-500 hover:text-white"><X className="h-4 w-4" /></button>
+        </div>
+      ) : null}
+
       {error ? (
         <Panel className="border-red-500/30 bg-red-500/10">
           <div className="flex justify-between gap-4">
             <div>
               <div className="font-semibold text-red-100">SFTP {error.operation} failed</div>
               <div className="mt-1 text-sm text-red-100">{error.message}</div>
-              <details className="mt-2 text-xs text-red-100/80"><summary>Technical details</summary><pre className="mt-2 whitespace-pre-wrap break-words">{errorText(error)}</pre></details>
+              <details className="mt-2 text-xs text-red-100/80">
+                <summary>Details</summary>
+                <pre className="mt-2 whitespace-pre-wrap break-words">{[
+                  `Server: ${error.serverName}`,
+                  `Host: ${error.host}:${error.port}`,
+                  error.requestedPath ? `Path: ${error.requestedPath}` : null,
+                  `Operation: ${error.operation}`,
+                  `Error: ${error.message}`,
+                ].filter(Boolean).join("\n")}</pre>
+              </details>
             </div>
-            <Button variant="secondary" onClick={copyError}><Copy className="h-4 w-4" />Copy Error</Button>
+            <button onClick={() => setError(null)} className="shrink-0 text-red-200 hover:text-white"><X className="h-4 w-4" /></button>
           </div>
         </Panel>
       ) : null}
 
-      <Panel>
-        <div className="flex flex-wrap gap-2">
-          {quickPaths.map(([label, path]) => path ? <Button key={label} variant="secondary" onClick={() => load(path)}>{label}</Button> : null)}
-        </div>
-        <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center">
-          <div className="min-w-0 flex-1 break-words rounded-md border border-white/10 bg-black/20 px-3 py-2 text-sm text-slate-300">{currentPath}</div>
-          <Button variant="secondary" onClick={() => load(parentPath(currentPath))}>Up</Button>
-          <Button variant="secondary" onClick={() => navigator.clipboard.writeText(currentPath)}><Copy className="h-4 w-4" />Copy Path</Button>
-        </div>
-      </Panel>
-
-      <Panel>
-        <div className="flex flex-wrap gap-3">
-          <Input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Search current folder" className="max-w-sm" />
-          <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border border-white/10 px-4 text-sm text-slate-100 hover:bg-white/[0.06]">
-            <Upload className="h-4 w-4" />
-            Upload
-            <input type="file" className="hidden" onChange={(event) => upload(event.target.files?.[0])} />
-          </label>
-          <Button variant="secondary" onClick={createFolder}>Create Folder</Button>
-          <Button variant="secondary" onClick={createTextFile}>New Text File</Button>
-          <Button variant="secondary" onClick={() => runCommand("c.plugins")}>c.plugins</Button>
-          <Button variant="secondary" onClick={() => runCommand("save")}>save</Button>
-        </div>
-
-        <div className="mt-4 grid gap-2">
-          {filtered.map((entry) => (
-            <div key={entry.path} className="flex min-w-0 flex-col gap-2 rounded-md border border-white/10 bg-black/20 p-3 md:flex-row md:items-center md:justify-between">
-              <button className="flex min-w-0 items-center gap-3 text-left" onClick={() => entry.type === "directory" ? load(entry.path) : readFile(entry.path)}>
-                {entry.type === "directory" ? <Folder className="h-4 w-4 text-orange-300" /> : <FileText className="h-4 w-4 text-slate-300" />}
-                <span className="break-all text-sm text-slate-100">{entry.name}</span>
-              </button>
-              <div className="flex flex-wrap gap-2">
-                <Button variant="secondary" onClick={() => rename(entry.path)}>Rename</Button>
-                <Button variant="danger" onClick={() => remove(entry.path)}>Delete</Button>
-              </div>
-            </div>
+      <div className="grid gap-4 lg:grid-cols-[200px_1fr]">
+        {/* Bookmarks sidebar */}
+        <div className="grid gap-1 self-start">
+          <div className="px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Bookmarks</div>
+          {quickPaths.map((q) => (
+            <button
+              key={q.label}
+              onClick={() => load(q.path)}
+              className={clsx(
+                "flex items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition hover:bg-white/[0.06]",
+                currentPath === q.path ? "bg-orange-500/15 text-orange-100" : "text-slate-400",
+              )}
+            >
+              <FolderOpen className="h-3.5 w-3.5 shrink-0" />
+              {q.label}
+            </button>
           ))}
         </div>
-      </Panel>
 
-      {editingPath ? (
-        <Panel>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <h2 className="break-all text-lg font-semibold text-white">{editingPath}</h2>
-            <Button onClick={saveFile}><Save className="h-4 w-4" />Save</Button>
+        {/* Main file browser */}
+        <div className="grid gap-3">
+          {/* Toolbar */}
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border border-white/10 px-3 text-sm text-slate-100 hover:bg-white/[0.06]">
+              <Upload className="h-4 w-4" />Upload
+              <input type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadFile(f); e.target.value = ""; }} />
+            </label>
+            <Button variant="secondary" onClick={createFolder}><FolderPlus className="h-4 w-4" />New Folder</Button>
+            <Button variant="secondary" onClick={createFile}><FilePlus className="h-4 w-4" />New File</Button>
+            <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter…" className="ml-auto max-w-48" />
           </div>
-          <textarea value={editorContent} onChange={(event) => setEditorContent(event.target.value)} className="mt-4 h-96 w-full resize-y rounded-md border border-white/10 bg-black/40 p-4 font-mono text-sm text-slate-100 outline-none focus:border-orange-400" />
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Button variant="secondary" onClick={() => runCommand("c.plugins")}>c.plugins</Button>
-            <Button variant="secondary" onClick={() => {
-              const plugin = window.prompt("Plugin name");
-              if (plugin) runCommand(`c.reload ${plugin}`);
-            }}>Reload plugin</Button>
+
+          {/* Breadcrumb */}
+          <div className="flex min-w-0 flex-wrap items-center gap-1 rounded-md border border-white/10 bg-black/20 px-3 py-2 text-sm">
+            <button onClick={() => load("/")} className="shrink-0 text-slate-400 hover:text-orange-300">/</button>
+            {crumbs.map((crumb, i) => (
+              <span key={crumb.path} className="flex items-center gap-1">
+                <ChevronRight className="h-3 w-3 shrink-0 text-slate-600" />
+                <button
+                  onClick={() => load(crumb.path)}
+                  className={clsx("hover:text-orange-300", i === crumbs.length - 1 ? "text-white" : "text-slate-400")}
+                >
+                  {crumb.label}
+                </button>
+              </span>
+            ))}
+            <button
+              onClick={() => navigator.clipboard.writeText(currentPath)}
+              className="ml-auto shrink-0 text-slate-500 hover:text-slate-300"
+              title="Copy path"
+            >
+              <Copy className="h-3.5 w-3.5" />
+            </button>
           </div>
-        </Panel>
-      ) : null}
+
+          {/* File table */}
+          <div
+            ref={dropRef}
+            onDragOver={onDragOver}
+            onDragLeave={onDragLeave}
+            onDrop={onDrop}
+            className={clsx(
+              "relative min-h-64 overflow-hidden rounded-md border transition",
+              dragging ? "border-orange-400 bg-orange-500/10" : "border-white/10 bg-black/20",
+            )}
+          >
+            {dragging && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center">
+                <div className="flex flex-col items-center gap-2 text-orange-300">
+                  <Upload className="h-8 w-8" />
+                  <span className="text-sm font-medium">Drop to upload</span>
+                </div>
+              </div>
+            )}
+
+            {/* Column headers */}
+            <div className="grid grid-cols-[1fr_80px_160px_100px] gap-2 border-b border-white/10 px-4 py-2">
+              {(["name", "size", "modified"] as const).map((col) => (
+                <button
+                  key={col}
+                  onClick={() => toggleSort(col)}
+                  className={clsx("flex items-center gap-1 text-xs font-semibold uppercase tracking-wide", sortKey === col ? "text-orange-300" : "text-slate-500 hover:text-slate-300")}
+                >
+                  {col === "name" ? "Name" : col === "size" ? "Size" : "Modified"}
+                  {sortKey === col && <span className="text-[10px]">{sortDir === "asc" ? "▲" : "▼"}</span>}
+                </button>
+              ))}
+              <div />
+            </div>
+
+            {sorted.length === 0 && !busy && (
+              <div className="px-4 py-8 text-center text-sm text-slate-500">
+                {filter ? "No files match the filter." : "This folder is empty."}
+              </div>
+            )}
+
+            {sorted.map((entry) => (
+              <div
+                key={entry.path}
+                className="group grid grid-cols-[1fr_80px_160px_100px] items-center gap-2 border-b border-white/[0.04] px-4 py-2 last:border-0 hover:bg-white/[0.04]"
+              >
+                <button
+                  className="flex min-w-0 items-center gap-2 text-left"
+                  onClick={() => entry.type === "directory" ? load(entry.path) : readFile(entry.path)}
+                >
+                  {fileIcon(entry)}
+                  <span className="truncate text-sm text-slate-100">{entry.name}</span>
+                </button>
+                <span className="text-xs text-slate-500">
+                  {entry.type === "directory" ? "—" : formatSize(entry.size)}
+                </span>
+                <span className="text-xs text-slate-500">{formatDate(entry.modifyTime)}</span>
+                <div className="flex justify-end gap-1 opacity-0 transition group-hover:opacity-100">
+                  {entry.type === "file" && (
+                    <button onClick={() => readFile(entry.path)} className="rounded p-1 text-slate-400 hover:bg-white/10 hover:text-white" title="Edit file">
+                      <FileText className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  <button onClick={() => rename(entry)} className="rounded p-1 text-slate-400 hover:bg-white/10 hover:text-white" title="Rename">
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <button onClick={() => remove(entry)} className="rounded p-1 text-slate-400 hover:bg-red-500/20 hover:text-red-300" title="Delete">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Status bar */}
+          <div className="text-xs text-slate-500">
+            {sorted.length} item{sorted.length !== 1 ? "s" : ""}
+            {filter ? ` matching "${filter}"` : ""}
+            {" "}· {currentPath}
+          </div>
+        </div>
+      </div>
+
+      {/* File editor overlay */}
+      {editingPath && (
+        <div className="fixed inset-0 z-40 flex flex-col bg-[#090b10]">
+          {/* Editor toolbar */}
+          <div className="flex shrink-0 items-center justify-between border-b border-white/10 bg-[#0c1017] px-4 py-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <FileText className="h-4 w-4 shrink-0 text-orange-300" />
+              <span className="truncate text-sm font-medium text-white">{editingPath}</span>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <Button onClick={saveFile} disabled={editorBusy}>
+                <Save className="h-4 w-4" />{editorBusy ? "Saving…" : "Save"}
+              </Button>
+              <button
+                onClick={() => setEditingPath(null)}
+                className="ml-1 rounded-md p-2 text-slate-400 hover:bg-white/[0.06] hover:text-white"
+                title="Close editor"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+          {/* Editor body */}
+          <textarea
+            value={editorContent}
+            onChange={(e) => setEditorContent(e.target.value)}
+            className="min-h-0 flex-1 resize-none bg-[#060809] p-6 font-mono text-sm leading-6 text-slate-100 outline-none"
+            spellCheck={false}
+          />
+        </div>
+      )}
     </div>
   );
 }
