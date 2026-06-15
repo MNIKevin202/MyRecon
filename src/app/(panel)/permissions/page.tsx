@@ -1,11 +1,13 @@
-import { ModulePlaceholder } from "@/components/module-placeholder";
+import { PermissionsClient } from "@/components/permissions-client";
+import { prisma } from "@/lib/prisma";
 
-export default function PermissionsPage() {
-  return (
-    <ModulePlaceholder
-      title="Permissions"
-      description="Permission management is prepared for searchable users, groups, presets, and bulk assignments."
-      items={["Search users", "Search groups", "Grant / revoke", "Permission presets"]}
-    />
-  );
+export const dynamic = "force-dynamic";
+
+export default async function PermissionsPage() {
+  const servers = await prisma.serverProfile.findMany({
+    orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+    select: { id: true, name: true, isDefault: true },
+  });
+
+  return <PermissionsClient servers={servers} />;
 }
