@@ -170,7 +170,7 @@ git push
 git push origin --tags
 ```
 
-Tags like `v0.1.7` create a GitHub Release with the Windows `.exe` installer and macOS `.dmg` attached. The macOS build runs on GitHub's macOS runner because DMG packaging must run on macOS.
+Tags like `v0.1.8` create a GitHub Release with the Windows `.exe` installer and macOS `.dmg` attached. The macOS build runs on GitHub's macOS runner because DMG packaging must run on macOS.
 
 Packaged desktop apps automatically check GitHub Releases for updates shortly after launch. When an update is available, it downloads in the background and installs after the app is closed. Set `MYRCON_DISABLE_AUTO_UPDATE=1` before launching the app to temporarily disable update checks.
 
