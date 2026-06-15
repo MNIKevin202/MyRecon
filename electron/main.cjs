@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, Menu, shell } = require("electron");
 const { autoUpdater } = require("electron-updater");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
@@ -8,6 +8,7 @@ const path = require("node:path");
 let mainWindow;
 
 let skippedUpdateVersion = null;
+let manualUpdateCheckInProgress = false;
 
 function configureAutoUpdates() {
   if (!app.isPackaged || process.env.MYRCON_DISABLE_AUTO_UPDATE === "1") {
@@ -20,13 +21,29 @@ function configureAutoUpdates() {
   autoUpdater.on("error", (error) => {
     console.warn("MyRcon updater error:", error);
     mainWindow?.webContents.send("update:error", error instanceof Error ? error.message : String(error));
+    if (manualUpdateCheckInProgress) {
+      manualUpdateCheckInProgress = false;
+      dialog.showErrorBox("Update check failed", error instanceof Error ? error.message : String(error));
+    }
   });
 
   autoUpdater.on("update-available", (info) => {
+    manualUpdateCheckInProgress = false;
     if (info.version === skippedUpdateVersion) {
       return;
     }
     mainWindow?.webContents.send("update:available", { version: info.version });
+  });
+
+  autoUpdater.on("update-not-available", () => {
+    if (manualUpdateCheckInProgress) {
+      manualUpdateCheckInProgress = false;
+      dialog.showMessageBox(mainWindow, {
+        type: "info",
+        title: "No Updates Available",
+        message: `MyRcon ${app.getVersion()} is up to date.`,
+      });
+    }
   });
 
   autoUpdater.on("download-progress", (progress) => {
@@ -54,6 +71,59 @@ function configureAutoUpdates() {
       console.warn("MyRcon update check failed:", error);
     });
   }, 10000);
+}
+
+function checkForUpdatesManually() {
+  if (!app.isPackaged || process.env.MYRCON_DISABLE_AUTO_UPDATE === "1") {
+    dialog.showMessageBox(mainWindow, {
+      type: "info",
+      title: "Check for Updates",
+      message: "Update checks are unavailable in this build.",
+    });
+    return;
+  }
+
+  manualUpdateCheckInProgress = true;
+  autoUpdater.checkForUpdates().catch((error) => {
+    manualUpdateCheckInProgress = false;
+    console.warn("MyRcon update check failed:", error);
+    dialog.showErrorBox("Update check failed", error instanceof Error ? error.message : String(error));
+  });
+}
+
+function buildApplicationMenu() {
+  const isMac = process.platform === "darwin";
+
+  const template = [
+    ...(isMac ? [{ role: "appMenu" }] : []),
+    { role: "fileMenu" },
+    { role: "editMenu" },
+    { role: "viewMenu" },
+    { role: "windowMenu" },
+    {
+      label: "Info",
+      submenu: [
+        {
+          label: "Check for Updates...",
+          click: () => checkForUpdatesManually(),
+        },
+        { type: "separator" },
+        {
+          label: "About MyRcon",
+          click: () => {
+            dialog.showMessageBox(mainWindow, {
+              type: "info",
+              title: "About MyRcon",
+              message: "MyRcon",
+              detail: `Version ${app.getVersion()}`,
+            });
+          },
+        },
+      ],
+    },
+  ];
+
+  return Menu.buildFromTemplate(template);
 }
 
 function ensureSecret(filePath) {
@@ -184,6 +254,7 @@ async function createWindow() {
 
 app.whenReady().then(async () => {
   try {
+    Menu.setApplicationMenu(buildApplicationMenu());
     await createWindow();
     configureAutoUpdates();
   } catch (error) {

@@ -27,6 +27,10 @@ export const commandSchema = z.object({
   command: z.string().trim().min(1).max(2000),
 });
 
+export const chatMessageSchema = z.object({
+  message: z.string().trim().min(1).max(512),
+});
+
 export const sftpSettingsSchema = z.object({
   sftpEnabled: z.coerce.boolean().default(false),
   sftpHost: z.string().trim().max(255).optional().nullable(),
