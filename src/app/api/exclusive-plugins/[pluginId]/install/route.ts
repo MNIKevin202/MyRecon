@@ -38,12 +38,13 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   try {
     await writeTextFile(server, installPath, plugin.content);
+    // Store "version|path" so the UI can detect when an update is available
     await prisma.appSetting.upsert({
       where: { key: `plugin_installed:${pluginId}:${body.serverId}` },
-      update: { value: installPath },
-      create: { key: `plugin_installed:${pluginId}:${body.serverId}`, value: installPath },
+      update: { value: `${plugin.version}|${installPath}` },
+      create: { key: `plugin_installed:${pluginId}:${body.serverId}`, value: `${plugin.version}|${installPath}` },
     });
-    return NextResponse.json({ success: true, path: installPath });
+    return NextResponse.json({ success: true, path: installPath, version: plugin.version });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "SFTP write failed" },

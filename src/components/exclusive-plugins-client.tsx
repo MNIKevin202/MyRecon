@@ -1,11 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import {
+  AlertTriangle,
   Check,
   ChevronRight,
   Download,
   Lock,
+  RefreshCw,
   Settings2,
   ShieldCheck,
   ShieldOff,
@@ -245,86 +247,129 @@ function ManageModal({
 
 // ─── Plugin Card ──────────────────────────────────────────────────────────────
 
-type InstallState = "idle" | "installing" | "success" | "error";
+type ActionState = "idle" | "busy" | "ok" | "err";
+
+function ActionBtn({
+  state, onClick, disabled, children, variant = "default",
+}: {
+  state: ActionState;
+  onClick: () => void;
+  disabled?: boolean;
+  children: ReactNode;
+  variant?: "default" | "ok" | "warn";
+}) {
+  const base = "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition disabled:opacity-40";
+  const colors = {
+    default: "border-white/[0.08] text-slate-400 hover:bg-white/[0.06] hover:text-white",
+    ok:      "border-emerald-500/25 bg-emerald-500/[0.08] text-emerald-400 hover:bg-emerald-500/[0.13]",
+    warn:    "border-amber-500/30 bg-amber-500/[0.08] text-amber-400 hover:bg-amber-500/[0.14]",
+  };
+  return (
+    <button onClick={onClick} disabled={disabled || state === "busy"} className={clsx(base, colors[variant])}>
+      {state === "busy" ? <Zap className="h-3 w-3 animate-pulse" /> : null}
+      {children}
+    </button>
+  );
+}
 
 function PluginCard({
-  plugin, servers, installedServerIds, onInstalled,
+  plugin, servers, installedVersions, onInstalled,
 }: {
   plugin: PluginMeta;
   servers: ServerOption[];
-  installedServerIds: Set<string>;
-  onInstalled: (sid: string) => void;
+  // serverId → installedVersion (or undefined if not installed)
+  installedVersions: Record<string, string>;
+  onInstalled: (sid: string, version: string) => void;
 }) {
   const defaultId =
     servers.find((s) => s.isDefault && s.sftpEnabled)?.id ??
     servers.find((s) => s.sftpEnabled)?.id ??
     servers[0]?.id ?? "";
 
-  const [serverId, setServerId]   = useState(defaultId);
-  const [state, setState]         = useState<InstallState>("idle");
-  const [errMsg, setErrMsg]       = useState("");
+  const [serverId, setServerId]     = useState(defaultId);
+  const [installState, setInstall]  = useState<ActionState>("idle");
+  const [reloadState, setReload]    = useState<ActionState>("idle");
+  const [errMsg, setErrMsg]         = useState("");
+  const [reloadMsg, setReloadMsg]   = useState("");
   const [showManage, setShowManage] = useState(false);
 
-  const server     = servers.find((s) => s.id === serverId);
-  const canInstall = !!server?.sftpEnabled;
-  const installed  = installedServerIds.has(serverId);
+  const server           = servers.find((s) => s.id === serverId);
+  const canInstall       = !!server?.sftpEnabled;
+  const installedVersion = installedVersions[serverId];
+  const isInstalled      = !!installedVersion;
+  const hasUpdate        = isInstalled && installedVersion !== plugin.version;
 
   async function install() {
     if (!serverId || !canInstall) return;
-    setState("installing"); setErrMsg("");
+    setInstall("busy"); setErrMsg("");
     try {
-      const res = await fetch(`/api/exclusive-plugins/${plugin.id}/install`, {
+      const res  = await fetch(`/api/exclusive-plugins/${plugin.id}/install`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ serverId }),
       });
-      const data = (await res.json()) as { success?: boolean; error?: string };
-      if (!res.ok || !data.success) { setErrMsg(data.error ?? "Failed"); setState("error"); }
-      else { setState("success"); onInstalled(serverId); }
-    } catch { setErrMsg("Network error."); setState("error"); }
+      const data = (await res.json()) as { success?: boolean; version?: string; error?: string };
+      if (!res.ok || !data.success) { setErrMsg(data.error ?? "Failed"); setInstall("err"); }
+      else { setInstall("ok"); onInstalled(serverId, data.version ?? plugin.version); }
+    } catch { setErrMsg("Network error."); setInstall("err"); }
+  }
+
+  async function reload() {
+    if (!serverId) return;
+    setReload("busy"); setReloadMsg("");
+    try {
+      const res  = await fetch(`/api/exclusive-plugins/${plugin.id}/reload`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ serverId }),
+      });
+      const data = (await res.json()) as { success?: boolean; command?: string; error?: string };
+      if (!res.ok || !data.success) { setReloadMsg(data.error ?? "Reload failed"); setReload("err"); }
+      else { setReloadMsg(`Reloaded via ${data.command}`); setReload("ok"); setTimeout(() => setReloadMsg(""), 4000); }
+    } catch { setReloadMsg("Network error."); setReload("err"); }
   }
 
   return (
     <>
       <div className="overflow-hidden rounded-xl border border-white/[0.07] bg-[#0d1117]">
-        {/* Item image strip — F1-menu style grid */}
+        {/* Item image strip */}
         <div className="relative flex gap-px overflow-hidden bg-[#060a0d]" style={{ height: 72 }}>
           {plugin.previewItems.map((sn) => (
-            <div
-              key={sn}
-              className="flex flex-1 items-center justify-center bg-[#0a0e14] hover:bg-[#111820] transition"
-              style={{ minWidth: 56, maxWidth: 72 }}
-            >
+            <div key={sn} className="flex flex-1 items-center justify-center bg-[#0a0e14]" style={{ minWidth: 56, maxWidth: 72 }}>
               <ItemImg sn={sn} size={36} />
             </div>
           ))}
-          {/* Gradient fade on right */}
           <div className="pointer-events-none absolute inset-y-0 right-0 w-16 bg-gradient-to-l from-[#060a0d]" />
-          {/* Exclusive badge over strip */}
           <div className="pointer-events-none absolute left-2 top-2 flex items-center gap-1 rounded-full bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold text-orange-300 backdrop-blur-sm">
             <Lock className="h-2.5 w-2.5" /> Exclusive
           </div>
+          {hasUpdate && (
+            <div className="pointer-events-none absolute right-2 top-2 flex items-center gap-1 rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300 backdrop-blur-sm border border-amber-500/30">
+              <AlertTriangle className="h-2.5 w-2.5" /> Update available
+            </div>
+          )}
         </div>
 
         {/* Body */}
         <div className="px-4 pt-3 pb-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-semibold text-white">{plugin.name}</h3>
-                <span className="rounded bg-white/[0.07] px-1.5 py-0.5 font-mono text-[10px] text-slate-500">
-                  v{plugin.version}
-                </span>
-              </div>
-              <p className="mt-1 text-xs leading-relaxed text-slate-500">{plugin.description}</p>
-            </div>
+          <div className="flex items-start gap-2 min-w-0">
+            <h3 className="text-sm font-semibold text-white">{plugin.name}</h3>
+            <span className="shrink-0 rounded bg-white/[0.07] px-1.5 py-0.5 font-mono text-[10px] text-slate-500">
+              v{plugin.version}
+            </span>
+            {isInstalled && !hasUpdate && (
+              <span className="shrink-0 flex items-center gap-1 rounded bg-emerald-500/[0.1] px-1.5 py-0.5 text-[10px] text-emerald-500">
+                <Check className="h-2.5 w-2.5" /> v{installedVersion}
+              </span>
+            )}
+            {hasUpdate && (
+              <span className="shrink-0 font-mono text-[10px] text-slate-600">installed: v{installedVersion}</span>
+            )}
           </div>
+          <p className="mt-1 text-xs leading-relaxed text-slate-500">{plugin.description}</p>
 
-          {/* Tags + permission nodes */}
+          {/* Tags + perms */}
           <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
             {plugin.tags.map((t) => (
-              <span key={t} className="rounded border border-white/[0.07] px-1.5 py-0.5 text-[10px] text-slate-600">
-                {t}
-              </span>
+              <span key={t} className="rounded border border-white/[0.07] px-1.5 py-0.5 text-[10px] text-slate-600">{t}</span>
             ))}
             {plugin.permissions.map((p) => (
               <span key={p} className="flex items-center gap-1 rounded border border-emerald-500/20 bg-emerald-500/[0.06] px-1.5 py-0.5 font-mono text-[10px] text-emerald-600">
@@ -334,52 +379,68 @@ function PluginCard({
           </div>
 
           {/* Action row */}
-          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-white/[0.05] pt-3">
-            {/* Server select */}
+          <div className="mt-3 border-t border-white/[0.05] pt-3 space-y-2">
+            {/* Server selector */}
             <div className="flex items-center gap-1.5">
               <select
                 value={serverId}
-                onChange={(e) => { setServerId(e.target.value); setState("idle"); }}
+                onChange={(e) => { setServerId(e.target.value); setInstall("idle"); setReload("idle"); setErrMsg(""); setReloadMsg(""); }}
                 className="rounded-lg border border-white/[0.08] bg-white/[0.04] px-2 py-1 text-xs text-slate-300 outline-none focus:border-orange-400"
               >
-                {servers.map((s) => (
-                  <option key={s.id} value={s.id} disabled={!s.sftpEnabled}>
-                    {s.name}{!s.sftpEnabled ? " (SFTP off)" : ""}{installedServerIds.has(s.id) ? " ✓" : ""}
-                  </option>
-                ))}
+                {servers.map((s) => {
+                  const iv = installedVersions[s.id];
+                  const upd = iv && iv !== plugin.version;
+                  return (
+                    <option key={s.id} value={s.id} disabled={!s.sftpEnabled}>
+                      {s.name}{!s.sftpEnabled ? " (SFTP off)" : ""}{iv ? (upd ? " ⚠" : " ✓") : ""}
+                    </option>
+                  );
+                })}
               </select>
               {server && !server.sftpEnabled && (
                 <span className="text-[10px] text-amber-500/70">Enable SFTP in settings</span>
               )}
             </div>
 
-            <div className="ml-auto flex items-center gap-1.5">
-              {errMsg && <span className="text-[11px] text-red-400">{errMsg}</span>}
+            {/* Feedback messages */}
+            {errMsg    && <p className="text-[11px] text-red-400">{errMsg}</p>}
+            {reloadMsg && <p className={clsx("text-[11px]", reloadState === "err" ? "text-red-400" : "text-emerald-400")}>{reloadMsg}</p>}
 
-              {/* Manage — only when installed */}
-              {installed && plugin.permissions.length > 0 && (
-                <button
-                  onClick={() => setShowManage(true)}
-                  className="flex items-center gap-1 rounded-lg border border-white/[0.08] px-2.5 py-1.5 text-[11px] text-slate-400 hover:bg-white/[0.06] hover:text-white transition"
-                >
+            {/* Buttons */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              {/* Manage */}
+              {isInstalled && plugin.permissions.length > 0 && (
+                <ActionBtn state="idle" onClick={() => setShowManage(true)}>
                   <Settings2 className="h-3 w-3" /> Manage
-                </button>
+                </ActionBtn>
               )}
 
-              {/* Install / Installed */}
+              {/* Reload — only when installed */}
+              {isInstalled && (
+                <ActionBtn state={reloadState} onClick={() => void reload()} variant={reloadState === "ok" ? "ok" : "default"}>
+                  <RefreshCw className={clsx("h-3 w-3", reloadState === "busy" && "animate-spin")} />
+                  {reloadState === "ok" ? "Reloaded" : "Reload"}
+                </ActionBtn>
+              )}
+
+              {/* Install / Update / Installed */}
               <button
-                onClick={install}
-                disabled={!canInstall || state === "installing"}
+                onClick={() => void install()}
+                disabled={!canInstall || installState === "busy"}
                 className={clsx(
-                  "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[11px] font-medium transition disabled:opacity-40",
-                  installed || state === "success"
+                  "ml-auto flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[11px] font-medium transition disabled:opacity-40",
+                  hasUpdate
+                    ? "border-amber-500/30 bg-amber-500/[0.08] text-amber-300 hover:bg-amber-500/[0.14]"
+                    : isInstalled || installState === "ok"
                     ? "border-emerald-500/25 bg-emerald-500/[0.08] text-emerald-400 hover:bg-emerald-500/[0.13]"
                     : "border-orange-500/30 bg-orange-500/10 text-orange-300 hover:bg-orange-500/15",
                 )}
               >
-                {state === "installing" ? (
-                  <><Zap className="h-3 w-3 animate-pulse" /> Installing…</>
-                ) : installed || state === "success" ? (
+                {installState === "busy" ? (
+                  <><Zap className="h-3 w-3 animate-pulse" /> {hasUpdate ? "Updating…" : "Installing…"}</>
+                ) : hasUpdate ? (
+                  <><Download className="h-3 w-3" /> Update to v{plugin.version}</>
+                ) : isInstalled || installState === "ok" ? (
                   <><Check className="h-3 w-3" /> Installed</>
                 ) : (
                   <><Download className="h-3 w-3" /> Install</>
@@ -391,10 +452,7 @@ function PluginCard({
       </div>
 
       {showManage && server && (
-        <ManageModal
-          plugin={plugin} serverId={serverId} serverName={server.name}
-          onClose={() => setShowManage(false)}
-        />
+        <ManageModal plugin={plugin} serverId={serverId} serverName={server.name} onClose={() => setShowManage(false)} />
       )}
     </>
   );
@@ -407,14 +465,16 @@ export function ExclusivePluginsClient({
 }: {
   plugins: PluginMeta[];
   servers: ServerOption[];
-  installedOn: Record<string, string[]>;
+  // pluginId → { serverId → installedVersion }
+  installedOn: Record<string, Record<string, string>>;
 }) {
-  const [localInstalls, setLocalInstalls] = useState<Record<string, Set<string>>>({});
+  // Local version map updated optimistically after install
+  const [localVersions, setLocalVersions] = useState<Record<string, Record<string, string>>>({});
 
-  function handleInstalled(pluginId: string, serverId: string) {
-    setLocalInstalls((prev) => ({
+  function handleInstalled(pluginId: string, serverId: string, version: string) {
+    setLocalVersions((prev) => ({
       ...prev,
-      [pluginId]: new Set([...(prev[pluginId] ?? []), serverId]),
+      [pluginId]: { ...(prev[pluginId] ?? {}), [serverId]: version },
     }));
   }
 
@@ -443,12 +503,12 @@ export function ExclusivePluginsClient({
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {plugins.map((plugin) => {
-            const ids = new Set([...(installedOn[plugin.id] ?? []), ...(localInstalls[plugin.id] ?? [])]);
+            const versions = { ...(installedOn[plugin.id] ?? {}), ...(localVersions[plugin.id] ?? {}) };
             return (
               <PluginCard
                 key={plugin.id} plugin={plugin} servers={servers}
-                installedServerIds={ids}
-                onInstalled={(sid) => handleInstalled(plugin.id, sid)}
+                installedVersions={versions}
+                onInstalled={(sid, ver) => handleInstalled(plugin.id, sid, ver)}
               />
             );
           })}

@@ -17,12 +17,13 @@ export default async function ExclusivePluginsPage() {
     }),
   ]);
 
-  // Build map: pluginId → Set<serverId>
-  const installedOn: Record<string, string[]> = {};
+  // Build map: pluginId → { serverId → installedVersion }
+  const installedOn: Record<string, Record<string, string>> = {};
   for (const row of installedSettings) {
     const [, pluginId, serverId] = row.key.split(":");
     if (pluginId && serverId) {
-      (installedOn[pluginId] ??= []).push(serverId);
+      const version = row.value?.split("|")[0] ?? "unknown";
+      (installedOn[pluginId] ??= {})[serverId] = version;
     }
   }
 
@@ -30,7 +31,7 @@ export default async function ExclusivePluginsPage() {
     <ExclusivePluginsClient
       plugins={EXCLUSIVE_PLUGINS.map(({ content: _c, ...meta }) => meta)}
       servers={servers}
-      installedOn={installedOn}
+      installedOn={installedOn as Record<string, Record<string, string>>}
     />
   );
 }
