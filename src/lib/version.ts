@@ -1,2 +1,2 @@
-export const APP_VERSION = "0.1.23";
-export const BUILD_STAMP = "2026-06-15-notifications";
+export const APP_VERSION = "0.1.24";
+export const BUILD_STAMP = "2026-06-15-notification-rules";
