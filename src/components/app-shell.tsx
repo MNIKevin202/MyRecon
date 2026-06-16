@@ -17,6 +17,7 @@ import {
   LogOut,
   MessageSquare,
   PlugZap,
+  Recycle,
   ScrollText,
   Server,
   Settings,
@@ -53,6 +54,7 @@ const navSections: NavSection[] = [
     items: [
       { href: "/admin-panel",        label: "Admin Panel",       icon: LayoutGrid },
       { href: "/exclusive-plugins",  label: "Exclusive Plugins", icon: Lock },
+      { href: "/reclaim",            label: "Reclaim",           icon: Recycle },
     ],
   },
 ];

@@ -39,6 +39,31 @@ export const EXCLUSIVE_PLUGINS: ExclusivePlugin[] = [
     ],
     contentUrl: "https://raw.githubusercontent.com/MNIKevin202/MyRecon/main/plugins/MyRconAdminPanel.cs",
   },
+  {
+    id: "reclaim",
+    name: "Reclaim",
+    version: "1.0.0",
+    description: "PvE server cleanup and abandoned asset management. Detect abandoned bases, unused vehicles, and orphaned deployables.",
+    longDescription: "Tracks player last-seen times, entity interactions (loot, doors, vehicle mounts), and runs on-demand scans to classify every TC-covered base, vehicle, and standalone deployable on the server. Results feed directly into the MyRCON Reclaim panel. Admins can protect, ignore, or delete flagged assets individually. Optional auto-cleanup (off by default) targets only Low-risk CleanupReady assets. Player warning system notifies owners on next login before any action is taken. Requires myrconreclaim.admin permission.",
+    tags: ["PvE", "Cleanup", "Admin", "Performance"],
+    filename: "MyRconReclaim.cs",
+    defaultPath: "oxide/plugins/MyRconReclaim.cs",
+    permissions: [
+      "myrconreclaim.admin",
+      "myrconreclaim.scan",
+      "myrconreclaim.inspect",
+      "myrconreclaim.delete",
+      "myrconreclaim.protect",
+      "myrconreclaim.ignore",
+      "myrconreclaim.autocleanup",
+    ],
+    previewItems: [
+      "hammer", "lock.code", "box.wooden.large", "sleepingbag_leather_deployed",
+      "autoturret_deployed", "furnace", "rowboat", "minicopter.entity",
+      "campfire", "workbench2.deployed", "building.planner", "tool.camera",
+    ],
+    contentUrl: "https://raw.githubusercontent.com/MNIKevin202/MyRecon/main/plugins/MyRconReclaim.cs",
+  },
 ];
 
 export function getPlugin(id: string): ExclusivePlugin | undefined {
