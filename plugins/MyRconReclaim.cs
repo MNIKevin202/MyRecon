@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("MyRconReclaim", "MyRcon", "1.0.2")]
+    [Info("MyRconReclaim", "MyRcon", "1.0.3")]
     [Description("PvE server cleanup and abandoned asset management for MyRCON")]
     public class MyRconReclaim : RustPlugin
     {
@@ -155,7 +155,7 @@ namespace Oxide.Plugins
 
         // ── Runtime state ─────────────────────────────────────────────────────
         private bool _isScanning = false;
-        private readonly Dictionary<uint, long> _entityLastInteraction = new Dictionary<uint, long>();
+        private readonly Dictionary<ulong, long> _entityLastInteraction = new Dictionary<ulong, long>();
         private List<BaseEntry>       _cachedBases       = new List<BaseEntry>();
         private List<VehicleEntry>    _cachedVehicles    = new List<VehicleEntry>();
         private List<DeployableEntry> _cachedDeployables = new List<DeployableEntry>();
@@ -272,7 +272,7 @@ namespace Oxide.Plugins
                     var tc = entity as BuildingPrivilege;
                     if (tc != null)
                     {
-                        var entry = ClassifyBase(tc, now);
+                        var entry = ClassifyBase(entity, now);
                         summary.TotalBases++;
                         if (entry.Status == "Abandoned" || entry.Status == "CleanupReady") summary.AbandonedBases++;
                         if (entry.Status == "CleanupReady") summary.CleanupReadyBases++;
@@ -329,8 +329,10 @@ namespace Oxide.Plugins
             finally { _isScanning = false; }
         }
 
-        BaseEntry ClassifyBase(BuildingPrivilege tc, long now)
+        BaseEntry ClassifyBase(BaseEntity tcBase, long now)
         {
+            var tc = tcBase as BuildingPrivilege;
+            if (tc == null) return null;
             string netId    = tc.net.ID.Value.ToString();
             string ownerId  = tc.OwnerID.ToString();
             string ownerName = GetPlayerName(tc.OwnerID);
@@ -410,7 +412,7 @@ namespace Oxide.Plugins
 
             long lastUsed    = GetLastTouch(entity.net.ID.Value);
             double daysUnused = lastUsed > 0 ? (now - lastUsed) / 86400.0 : double.MaxValue;
-            float hp         = entity.MaxHealth() > 0 ? entity.health / entity.MaxHealth() : 1f;
+            float hp         = entity.MaxHealth() > 0 ? entity.Health() / entity.MaxHealth() : 1f;
             bool decaying    = hp < 0.3f;
 
             string status, risk;
@@ -487,7 +489,7 @@ namespace Oxide.Plugins
                 if (entry.Risk != "Low" || entry.Status != "CleanupReady") continue;
                 if (entry.IsProtected || entry.IsIgnored) continue;
 
-                uint netId; if (!uint.TryParse(entry.Id, out netId)) continue;
+                ulong netId; if (!ulong.TryParse(entry.Id, out netId)) continue;
                 var tc = FindEntity(netId) as BuildingPrivilege;
                 if (tc == null || tc.IsDestroyed) continue;
 
@@ -506,8 +508,10 @@ namespace Oxide.Plugins
             TrimHistory();
         }
 
-        int KillBase(BuildingPrivilege tc)
+        int KillBase(BaseEntity tcBase)
         {
+            var tc = tcBase as BuildingPrivilege;
+            if (tc == null) return 0;
             int count = 0;
             try
             {
@@ -748,8 +752,8 @@ namespace Oxide.Plugins
             if (!IsRconOrAdmin(arg)) { arg.ReplyWith(Err("No permission")); return; }
             if (!arg.HasArgs()) { arg.ReplyWith(Err("netId required")); return; }
             string netIdStr = arg.GetString(0);
-            uint netId;
-            if (!uint.TryParse(netIdStr, out netId)) { arg.ReplyWith(Err("Invalid netId")); return; }
+            ulong netId;
+            if (!ulong.TryParse(netIdStr, out netId)) { arg.ReplyWith(Err("Invalid netId")); return; }
 
             if (_data.Protected.Contains(netIdStr)) { arg.ReplyWith(Err("Entity is protected. Unprotect first.")); return; }
 
@@ -799,7 +803,7 @@ namespace Oxide.Plugins
             return 0;
         }
 
-        long GetLastTouch(uint netId) { long t; return _entityLastInteraction.TryGetValue(netId, out t) ? t : 0; }
+        long GetLastTouch(ulong netId) { long t; return _entityLastInteraction.TryGetValue(netId, out t) ? t : 0; }
 
         bool IsOwnerProtected(ulong id)
         {
@@ -873,7 +877,7 @@ namespace Oxide.Plugins
             return colStr + (row + 1);
         }
 
-        BaseEntity FindEntity(uint netId)
+        BaseEntity FindEntity(ulong netId)
         {
             foreach (BaseNetworkable net in BaseNetworkable.serverEntities)
             { if (net?.net != null && net.net.ID.Value == netId) return net as BaseEntity; }
