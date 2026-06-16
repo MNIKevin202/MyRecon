@@ -3,10 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   Check,
+  ChevronRight,
   Download,
   Lock,
-  Package,
-  Server,
   Settings2,
   ShieldCheck,
   ShieldOff,
@@ -15,7 +14,7 @@ import {
   Zap,
 } from "lucide-react";
 import { clsx } from "@/lib/utils";
-import { Button, Panel } from "@/components/ui";
+import { Button } from "@/components/ui";
 
 type PluginMeta = {
   id: string;
@@ -26,6 +25,7 @@ type PluginMeta = {
   tags: string[];
   filename: string;
   permissions: string[];
+  previewItems: string[];
 };
 
 type ServerOption = {
@@ -35,183 +35,141 @@ type ServerOption = {
   sftpEnabled: boolean;
 };
 
-type KnownPlayer = {
-  steamId: string;
-  name: string;
-  connected: boolean;
-};
+type KnownPlayer = { steamId: string; name: string; connected: boolean };
+type PermUser    = { steamId: string; name: string };
 
-type PermissionUser = {
-  steamId: string;
-  name: string;
-};
+const CDN = "https://cdn.rusthelper.com/item";
 
-// ─── Manage Permissions Modal ────────────────────────────────────────────────
+function ItemImg({ sn, size = 40 }: { sn: string; size?: number }) {
+  const [err, setErr] = useState(false);
+  if (err) return <div style={{ width: size, height: size }} className="rounded bg-white/[0.04]" />;
+  return (
+    <img
+      src={`${CDN}/${sn}/image`}
+      alt={sn}
+      loading="lazy"
+      onError={() => setErr(true)}
+      style={{ width: size, height: size }}
+      className="object-contain"
+    />
+  );
+}
+
+// ─── Manage Modal ─────────────────────────────────────────────────────────────
 
 function ManageModal({
-  plugin,
-  serverId,
-  serverName,
-  onClose,
+  plugin, serverId, serverName, onClose,
 }: {
-  plugin: PluginMeta;
-  serverId: string;
-  serverName: string;
-  onClose: () => void;
+  plugin: PluginMeta; serverId: string; serverName: string; onClose: () => void;
 }) {
-  const permission = plugin.permissions[0] ?? "";
-  const [grantedUsers, setGrantedUsers] = useState<PermissionUser[]>([]);
-  const [knownPlayers, setKnownPlayers] = useState<KnownPlayer[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState<string | null>(null); // steamId being operated on
-  const [error, setError] = useState("");
-  const [manualSteamId, setManualSteamId] = useState("");
+  const perm = plugin.permissions[0] ?? "";
+  const [granted, setGranted]   = useState<PermUser[]>([]);
+  const [players, setPlayers]   = useState<KnownPlayer[]>([]);
+  const [loading, setLoading]   = useState(true);
+  const [busy, setBusy]         = useState<string | null>(null);
+  const [err, setErr]           = useState("");
+  const [manualId, setManualId] = useState("");
   const [manualName, setManualName] = useState("");
 
   const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
+    setLoading(true); setErr("");
     try {
-      const [accessRes, playersRes] = await Promise.all([
-        fetch(`/api/servers/${serverId}/permissions/access?permission=${encodeURIComponent(permission)}`),
+      const [ar, pr] = await Promise.all([
+        fetch(`/api/servers/${serverId}/permissions/access?permission=${encodeURIComponent(perm)}`),
         fetch(`/api/servers/${serverId}/permissions/players`),
       ]);
-      if (accessRes.ok) {
-        const data = (await accessRes.json()) as { users: PermissionUser[] };
-        setGrantedUsers(data.users ?? []);
-      }
-      if (playersRes.ok) {
-        const data = (await playersRes.json()) as { players: KnownPlayer[] };
-        setKnownPlayers(data.players ?? []);
-      }
-    } catch {
-      setError("Failed to load permission data.");
-    } finally {
-      setLoading(false);
-    }
-  }, [serverId, permission]);
+      if (ar.ok) setGranted(((await ar.json()) as { users: PermUser[] }).users ?? []);
+      if (pr.ok) setPlayers(((await pr.json()) as { players: KnownPlayer[] }).players ?? []);
+    } catch { setErr("Failed to load."); }
+    finally { setLoading(false); }
+  }, [serverId, perm]);
 
   useEffect(() => {
     const t = window.setTimeout(() => { void load(); }, 0);
     return () => window.clearTimeout(t);
   }, [load]);
 
-  const hasPermission = (steamId: string) =>
-    grantedUsers.some((u) => u.steamId === steamId);
+  const hasAccess = (id: string) => granted.some((u) => u.steamId === id);
 
-  async function grant(steamId: string, playerName: string) {
-    setBusy(steamId);
-    setError("");
-    try {
-      const res = await fetch(`/api/servers/${serverId}/permissions/grant`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ steamId, permission, playerName, pluginName: plugin.name }),
-      });
-      if (!res.ok) {
-        const d = (await res.json()) as { error?: string };
-        setError(d.error ?? "Grant failed");
-      } else {
-        await load();
-      }
-    } catch {
-      setError("Network error.");
-    } finally {
-      setBusy(null);
-    }
+  async function grant(steamId: string, name: string) {
+    setBusy(steamId); setErr("");
+    const res = await fetch(`/api/servers/${serverId}/permissions/grant`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ steamId, permission: perm, playerName: name, pluginName: plugin.name }),
+    });
+    if (!res.ok) setErr(((await res.json()) as { error?: string }).error ?? "Grant failed");
+    else await load();
+    setBusy(null);
   }
 
   async function revoke(steamId: string) {
-    setBusy(steamId);
-    setError("");
-    try {
-      const res = await fetch(`/api/servers/${serverId}/permissions/revoke`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ steamId, permission }),
-      });
-      if (!res.ok) {
-        const d = (await res.json()) as { error?: string };
-        setError(d.error ?? "Revoke failed");
-      } else {
-        await load();
-      }
-    } catch {
-      setError("Network error.");
-    } finally {
-      setBusy(null);
-    }
+    setBusy(steamId); setErr("");
+    const res = await fetch(`/api/servers/${serverId}/permissions/revoke`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ steamId, permission: perm }),
+    });
+    if (!res.ok) setErr(((await res.json()) as { error?: string }).error ?? "Revoke failed");
+    else await load();
+    setBusy(null);
   }
 
   async function grantManual() {
-    const id = manualSteamId.trim();
-    if (!/^\d{15,20}$/.test(id)) { setError("Enter a valid SteamID (15–20 digits)."); return; }
+    const id = manualId.trim();
+    if (!/^\d{15,20}$/.test(id)) { setErr("Enter a valid SteamID (15–20 digits)."); return; }
     await grant(id, manualName.trim() || id);
-    setManualSteamId("");
-    setManualName("");
+    setManualId(""); setManualName("");
   }
 
-  // Players not yet granted — online first, then offline
-  const ungrantedPlayers = knownPlayers.filter((p) => !hasPermission(p.steamId));
+  const ungranted = players.filter((p) => !hasAccess(p.steamId));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-      <div className="flex w-full max-w-lg flex-col gap-0 rounded-xl border border-white/10 bg-[#0c1017] shadow-2xl shadow-black/60">
-        {/* Header */}
-        <div className="flex items-center gap-3 border-b border-white/10 px-5 py-4">
-          <ShieldCheck className="h-5 w-5 shrink-0 text-orange-400" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+      <div className="flex w-full max-w-md flex-col rounded-xl border border-white/10 bg-[#0d1117] shadow-2xl shadow-black/70 overflow-hidden">
+        {/* header */}
+        <div className="flex items-center gap-3 border-b border-white/[0.08] bg-[#111820] px-4 py-3">
+          <ShieldCheck className="h-4 w-4 shrink-0 text-orange-400" />
           <div className="flex-1 min-w-0">
-            <p className="font-semibold text-white">{plugin.name} — Permissions</p>
-            <p className="text-xs text-slate-500 truncate">{serverName}</p>
+            <p className="text-sm font-semibold text-white leading-none">{plugin.name}</p>
+            <p className="mt-0.5 text-[11px] text-slate-500 truncate">{serverName}</p>
           </div>
-          <button onClick={onClose} className="text-slate-500 hover:text-white">
+          <button onClick={onClose} className="text-slate-500 hover:text-white transition">
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto max-h-[70vh] px-5 py-4 space-y-5">
-          {/* Permission node */}
-          <div className="flex items-center gap-2 rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 py-2">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-600">Permission</span>
-            <code className="ml-auto text-xs font-mono text-orange-300">{permission}</code>
-          </div>
+        {/* perm node */}
+        <div className="mx-4 mt-3 flex items-center gap-2 rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 py-2">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-600">Permission</span>
+          <code className="ml-auto text-[11px] font-mono text-orange-300">{perm}</code>
+        </div>
 
-          {error && (
-            <div className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">{error}</div>
-          )}
-
+        <div className="overflow-y-auto max-h-[60vh] px-4 py-3 space-y-4">
+          {err && <div className="rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-400">{err}</div>}
           {loading ? (
-            <p className="py-4 text-center text-sm text-slate-500">Loading…</p>
+            <p className="py-6 text-center text-sm text-slate-600">Loading…</p>
           ) : (
             <>
-              {/* Current access */}
+              {/* Has access */}
               <div>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Has Access ({grantedUsers.length})
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-600">
+                  Has Access · {granted.length}
                 </p>
-                {grantedUsers.length === 0 ? (
-                  <p className="text-sm text-slate-600">No players have this permission yet.</p>
+                {granted.length === 0 ? (
+                  <p className="text-xs text-slate-600">Nobody granted yet.</p>
                 ) : (
                   <div className="grid gap-1">
-                    {grantedUsers.map((u) => (
-                      <div
-                        key={u.steamId}
-                        className="flex items-center gap-2.5 rounded-md bg-emerald-500/[0.08] px-3 py-2"
-                      >
-                        <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
-                        <span className="flex-1 truncate text-sm text-slate-200">{u.name}</span>
-                        <span className="font-mono text-[10px] text-slate-600">{u.steamId}</span>
+                    {granted.map((u) => (
+                      <div key={u.steamId} className="flex items-center gap-2 rounded-lg bg-emerald-500/[0.07] px-2.5 py-1.5">
+                        <ShieldCheck className="h-3 w-3 shrink-0 text-emerald-500" />
+                        <span className="flex-1 truncate text-xs text-slate-200">{u.name}</span>
+                        <span className="font-mono text-[10px] text-slate-600 hidden sm:block">{u.steamId}</span>
                         <button
                           onClick={() => void revoke(u.steamId)}
                           disabled={busy === u.steamId}
-                          className="shrink-0 rounded p-1 text-slate-500 hover:bg-red-500/20 hover:text-red-400 disabled:opacity-40"
+                          className="ml-1 shrink-0 rounded p-1 text-slate-600 hover:bg-red-500/15 hover:text-red-400 disabled:opacity-40 transition"
                           title="Revoke"
                         >
-                          {busy === u.steamId ? (
-                            <Zap className="h-3.5 w-3.5 animate-pulse" />
-                          ) : (
-                            <ShieldOff className="h-3.5 w-3.5" />
-                          )}
+                          {busy === u.steamId ? <Zap className="h-3 w-3 animate-pulse" /> : <ShieldOff className="h-3 w-3" />}
                         </button>
                       </div>
                     ))}
@@ -219,35 +177,24 @@ function ManageModal({
                 )}
               </div>
 
-              {/* Grant from online/known players */}
-              {ungrantedPlayers.length > 0 && (
+              {/* Grant from players */}
+              {ungranted.length > 0 && (
                 <div>
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-600">
                     Grant to Player
                   </p>
-                  <div className="grid gap-1 max-h-48 overflow-y-auto">
-                    {ungrantedPlayers.map((p) => (
-                      <div
-                        key={p.steamId}
-                        className="flex items-center gap-2.5 rounded-md bg-white/[0.03] px-3 py-2"
-                      >
-                        <span className={clsx(
-                          "h-1.5 w-1.5 shrink-0 rounded-full",
-                          p.connected ? "bg-emerald-400" : "bg-slate-600",
-                        )} />
-                        <span className="flex-1 truncate text-sm text-slate-300">{p.name}</span>
-                        <span className="font-mono text-[10px] text-slate-600">{p.steamId}</span>
+                  <div className="grid gap-1 max-h-40 overflow-y-auto">
+                    {ungranted.map((p) => (
+                      <div key={p.steamId} className="flex items-center gap-2 rounded-lg bg-white/[0.03] px-2.5 py-1.5">
+                        <span className={clsx("h-1.5 w-1.5 shrink-0 rounded-full", p.connected ? "bg-emerald-400" : "bg-slate-700")} />
+                        <span className="flex-1 truncate text-xs text-slate-300">{p.name}</span>
                         <button
                           onClick={() => void grant(p.steamId, p.name)}
                           disabled={busy === p.steamId}
-                          className="shrink-0 rounded p-1 text-slate-500 hover:bg-emerald-500/20 hover:text-emerald-400 disabled:opacity-40"
+                          className="shrink-0 rounded p-1 text-slate-600 hover:bg-emerald-500/15 hover:text-emerald-400 disabled:opacity-40 transition"
                           title="Grant"
                         >
-                          {busy === p.steamId ? (
-                            <Zap className="h-3.5 w-3.5 animate-pulse" />
-                          ) : (
-                            <UserPlus className="h-3.5 w-3.5" />
-                          )}
+                          {busy === p.steamId ? <Zap className="h-3 w-3 animate-pulse" /> : <UserPlus className="h-3 w-3" />}
                         </button>
                       </div>
                     ))}
@@ -255,30 +202,27 @@ function ManageModal({
                 </div>
               )}
 
-              {/* Manual grant */}
+              {/* Manual */}
               <div>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Grant by SteamID
-                </p>
-                <div className="flex flex-col gap-2">
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-600">Grant by SteamID</p>
+                <div className="flex flex-col gap-1.5">
                   <input
-                    type="text"
-                    placeholder="SteamID (e.g. 76561198000000000)"
-                    value={manualSteamId}
-                    onChange={(e) => setManualSteamId(e.target.value)}
-                    className="rounded-md border border-white/10 bg-white/[0.04] px-3 py-1.5 text-sm text-slate-100 placeholder-slate-600 outline-none focus:border-orange-400"
+                    type="text" placeholder="76561198000000000"
+                    value={manualId} onChange={(e) => setManualId(e.target.value)}
+                    className="rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-xs text-slate-100 placeholder-slate-600 outline-none focus:border-orange-400 font-mono"
                   />
-                  <div className="flex gap-2">
+                  <div className="flex gap-1.5">
                     <input
-                      type="text"
-                      placeholder="Player name (optional)"
-                      value={manualName}
-                      onChange={(e) => setManualName(e.target.value)}
-                      className="flex-1 rounded-md border border-white/10 bg-white/[0.04] px-3 py-1.5 text-sm text-slate-100 placeholder-slate-600 outline-none focus:border-orange-400"
+                      type="text" placeholder="Name (optional)"
+                      value={manualName} onChange={(e) => setManualName(e.target.value)}
+                      className="flex-1 rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-xs text-slate-100 placeholder-slate-600 outline-none focus:border-orange-400"
                     />
-                    <Button onClick={() => void grantManual()} disabled={!!busy || !manualSteamId.trim()}>
-                      <UserPlus className="h-4 w-4" /> Grant
-                    </Button>
+                    <button
+                      onClick={() => void grantManual()} disabled={!!busy || !manualId.trim()}
+                      className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-slate-300 hover:bg-white/[0.08] hover:text-white disabled:opacity-40 transition"
+                    >
+                      <UserPlus className="h-3 w-3" /> Grant
+                    </button>
                   </div>
                 </div>
               </div>
@@ -286,10 +230,10 @@ function ManageModal({
           )}
         </div>
 
-        <div className="border-t border-white/10 px-5 py-3 flex justify-end">
+        <div className="border-t border-white/[0.08] px-4 py-3">
           <button
             onClick={onClose}
-            className="rounded-md border border-white/10 px-4 py-2 text-sm text-slate-400 hover:bg-white/[0.06] hover:text-white"
+            className="w-full rounded-lg border border-white/[0.08] py-2 text-xs text-slate-500 hover:bg-white/[0.05] hover:text-white transition"
           >
             Close
           </button>
@@ -299,179 +243,156 @@ function ManageModal({
   );
 }
 
-// ─── Plugin Card ─────────────────────────────────────────────────────────────
+// ─── Plugin Card ──────────────────────────────────────────────────────────────
 
 type InstallState = "idle" | "installing" | "success" | "error";
 
 function PluginCard({
-  plugin,
-  servers,
-  installedServerIds,
-  onInstalled,
+  plugin, servers, installedServerIds, onInstalled,
 }: {
   plugin: PluginMeta;
   servers: ServerOption[];
   installedServerIds: Set<string>;
-  onInstalled: (serverId: string) => void;
+  onInstalled: (sid: string) => void;
 }) {
-  const defaultServerId =
+  const defaultId =
     servers.find((s) => s.isDefault && s.sftpEnabled)?.id ??
     servers.find((s) => s.sftpEnabled)?.id ??
-    servers[0]?.id ??
-    "";
+    servers[0]?.id ?? "";
 
-  const [serverId, setServerId] = useState(defaultServerId);
-  const [installState, setInstallState] = useState<InstallState>("idle");
-  const [errorMsg, setErrorMsg] = useState("");
-  const [installedPath, setInstalledPath] = useState("");
+  const [serverId, setServerId]   = useState(defaultId);
+  const [state, setState]         = useState<InstallState>("idle");
+  const [errMsg, setErrMsg]       = useState("");
   const [showManage, setShowManage] = useState(false);
 
-  const selectedServer = servers.find((s) => s.id === serverId);
-  const canInstall = !!selectedServer?.sftpEnabled;
-  const isInstalled = installedServerIds.has(serverId);
+  const server     = servers.find((s) => s.id === serverId);
+  const canInstall = !!server?.sftpEnabled;
+  const installed  = installedServerIds.has(serverId);
 
   async function install() {
     if (!serverId || !canInstall) return;
-    setInstallState("installing");
-    setErrorMsg("");
+    setState("installing"); setErrMsg("");
     try {
       const res = await fetch(`/api/exclusive-plugins/${plugin.id}/install`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ serverId }),
       });
-      const data = (await res.json()) as { success?: boolean; path?: string; error?: string };
-      if (!res.ok || !data.success) {
-        setErrorMsg(data.error ?? "Installation failed");
-        setInstallState("error");
-      } else {
-        setInstalledPath(data.path ?? "");
-        setInstallState("success");
-        onInstalled(serverId);
-      }
-    } catch {
-      setErrorMsg("Network error — check your connection.");
-      setInstallState("error");
-    }
+      const data = (await res.json()) as { success?: boolean; error?: string };
+      if (!res.ok || !data.success) { setErrMsg(data.error ?? "Failed"); setState("error"); }
+      else { setState("success"); onInstalled(serverId); }
+    } catch { setErrMsg("Network error."); setState("error"); }
   }
 
   return (
     <>
-      <Panel className="flex flex-col gap-5">
-        {/* Top row */}
-        <div className="flex items-start gap-4">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-orange-500/15">
-            <Package className="h-6 w-6 text-orange-400" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-base font-semibold text-white">{plugin.name}</h3>
-              <span className="rounded bg-white/[0.07] px-1.5 py-0.5 text-[10px] font-mono text-slate-400">
-                v{plugin.version}
-              </span>
-              <span className="flex items-center gap-1 rounded bg-orange-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-orange-300">
-                <Lock className="h-2.5 w-2.5" /> MyRcon Exclusive
-              </span>
+      <div className="overflow-hidden rounded-xl border border-white/[0.07] bg-[#0d1117]">
+        {/* Item image strip — F1-menu style grid */}
+        <div className="relative flex gap-px overflow-hidden bg-[#060a0d]" style={{ height: 72 }}>
+          {plugin.previewItems.map((sn) => (
+            <div
+              key={sn}
+              className="flex flex-1 items-center justify-center bg-[#0a0e14] hover:bg-[#111820] transition"
+              style={{ minWidth: 56, maxWidth: 72 }}
+            >
+              <ItemImg sn={sn} size={36} />
             </div>
-            <p className="mt-1 text-sm text-slate-400">{plugin.description}</p>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {plugin.tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="rounded border border-white/10 px-2 py-0.5 text-[10px] text-slate-500"
-                >
-                  {tag}
-                </span>
-              ))}
-              {plugin.permissions.map((perm) => (
-                <span
-                  key={perm}
-                  className="flex items-center gap-1 rounded border border-emerald-500/20 bg-emerald-500/[0.07] px-2 py-0.5 text-[10px] font-mono text-emerald-500"
-                >
-                  <ShieldCheck className="h-2.5 w-2.5" />{perm}
-                </span>
-              ))}
-            </div>
+          ))}
+          {/* Gradient fade on right */}
+          <div className="pointer-events-none absolute inset-y-0 right-0 w-16 bg-gradient-to-l from-[#060a0d]" />
+          {/* Exclusive badge over strip */}
+          <div className="pointer-events-none absolute left-2 top-2 flex items-center gap-1 rounded-full bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold text-orange-300 backdrop-blur-sm">
+            <Lock className="h-2.5 w-2.5" /> Exclusive
           </div>
         </div>
 
-        {/* Long description */}
-        <p className="text-sm text-slate-500 leading-relaxed">{plugin.longDescription}</p>
+        {/* Body */}
+        <div className="px-4 pt-3 pb-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-white">{plugin.name}</h3>
+                <span className="rounded bg-white/[0.07] px-1.5 py-0.5 font-mono text-[10px] text-slate-500">
+                  v{plugin.version}
+                </span>
+              </div>
+              <p className="mt-1 text-xs leading-relaxed text-slate-500">{plugin.description}</p>
+            </div>
+          </div>
 
-        {/* Install footer */}
-        <div className="flex flex-wrap items-end gap-3 border-t border-white/[0.07] pt-4">
-          {/* Server selector */}
-          <div className="flex flex-col gap-1">
-            <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-600 flex items-center gap-1">
-              <Server className="h-2.5 w-2.5" /> Server
-            </label>
-            {servers.length === 0 ? (
-              <p className="text-xs text-slate-500">No servers configured.</p>
-            ) : (
+          {/* Tags + permission nodes */}
+          <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+            {plugin.tags.map((t) => (
+              <span key={t} className="rounded border border-white/[0.07] px-1.5 py-0.5 text-[10px] text-slate-600">
+                {t}
+              </span>
+            ))}
+            {plugin.permissions.map((p) => (
+              <span key={p} className="flex items-center gap-1 rounded border border-emerald-500/20 bg-emerald-500/[0.06] px-1.5 py-0.5 font-mono text-[10px] text-emerald-600">
+                <ShieldCheck className="h-2.5 w-2.5" />{p}
+              </span>
+            ))}
+          </div>
+
+          {/* Action row */}
+          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-white/[0.05] pt-3">
+            {/* Server select */}
+            <div className="flex items-center gap-1.5">
               <select
                 value={serverId}
-                onChange={(e) => { setServerId(e.target.value); setInstallState("idle"); }}
-                className="rounded-md border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-sm text-slate-100 outline-none focus:border-orange-400"
+                onChange={(e) => { setServerId(e.target.value); setState("idle"); }}
+                className="rounded-lg border border-white/[0.08] bg-white/[0.04] px-2 py-1 text-xs text-slate-300 outline-none focus:border-orange-400"
               >
                 {servers.map((s) => (
                   <option key={s.id} value={s.id} disabled={!s.sftpEnabled}>
-                    {s.name}{!s.sftpEnabled ? " (SFTP disabled)" : ""}
-                    {installedServerIds.has(s.id) ? " ✓" : ""}
+                    {s.name}{!s.sftpEnabled ? " (SFTP off)" : ""}{installedServerIds.has(s.id) ? " ✓" : ""}
                   </option>
                 ))}
               </select>
-            )}
-            {selectedServer && !selectedServer.sftpEnabled && (
-              <p className="text-[11px] text-amber-500/80">Enable SFTP in server settings to install.</p>
-            )}
-          </div>
+              {server && !server.sftpEnabled && (
+                <span className="text-[10px] text-amber-500/70">Enable SFTP in settings</span>
+              )}
+            </div>
 
-          <div className="ml-auto flex flex-col items-end gap-2">
-            {installState === "error" && (
-              <p className="max-w-xs text-right text-xs text-red-400">{errorMsg}</p>
-            )}
-            {(installState === "success" || isInstalled) && installedPath && (
-              <p className="text-[11px] font-mono text-slate-600 truncate max-w-xs text-right">{installedPath}</p>
-            )}
+            <div className="ml-auto flex items-center gap-1.5">
+              {errMsg && <span className="text-[11px] text-red-400">{errMsg}</span>}
 
-            <div className="flex items-center gap-2">
-              {/* Manage button — shown when installed on selected server */}
-              {isInstalled && plugin.permissions.length > 0 && (
+              {/* Manage — only when installed */}
+              {installed && plugin.permissions.length > 0 && (
                 <button
                   onClick={() => setShowManage(true)}
-                  className="flex items-center gap-1.5 rounded-md border border-white/10 px-3 py-2 text-sm text-slate-300 hover:bg-white/[0.06] hover:text-white transition"
+                  className="flex items-center gap-1 rounded-lg border border-white/[0.08] px-2.5 py-1.5 text-[11px] text-slate-400 hover:bg-white/[0.06] hover:text-white transition"
                 >
-                  <Settings2 className="h-4 w-4" /> Manage
+                  <Settings2 className="h-3 w-3" /> Manage
                 </button>
               )}
 
-              {/* Install / Installed button */}
-              <Button
+              {/* Install / Installed */}
+              <button
                 onClick={install}
-                disabled={!canInstall || installState === "installing"}
+                disabled={!canInstall || state === "installing"}
                 className={clsx(
-                  (installState === "success" || isInstalled) &&
-                    "border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/15",
+                  "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[11px] font-medium transition disabled:opacity-40",
+                  installed || state === "success"
+                    ? "border-emerald-500/25 bg-emerald-500/[0.08] text-emerald-400 hover:bg-emerald-500/[0.13]"
+                    : "border-orange-500/30 bg-orange-500/10 text-orange-300 hover:bg-orange-500/15",
                 )}
               >
-                {installState === "installing" ? (
-                  <><Zap className="h-4 w-4 animate-pulse" /> Installing…</>
-                ) : installState === "success" || isInstalled ? (
-                  <><Check className="h-4 w-4" /> Installed</>
+                {state === "installing" ? (
+                  <><Zap className="h-3 w-3 animate-pulse" /> Installing…</>
+                ) : installed || state === "success" ? (
+                  <><Check className="h-3 w-3" /> Installed</>
                 ) : (
-                  <><Download className="h-4 w-4" /> Install Plugin</>
+                  <><Download className="h-3 w-3" /> Install</>
                 )}
-              </Button>
+              </button>
             </div>
           </div>
         </div>
-      </Panel>
+      </div>
 
-      {showManage && selectedServer && (
+      {showManage && server && (
         <ManageModal
-          plugin={plugin}
-          serverId={serverId}
-          serverName={selectedServer.name}
+          plugin={plugin} serverId={serverId} serverName={server.name}
           onClose={() => setShowManage(false)}
         />
       )}
@@ -482,59 +403,51 @@ function PluginCard({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export function ExclusivePluginsClient({
-  plugins,
-  servers,
-  installedOn,
+  plugins, servers, installedOn,
 }: {
   plugins: PluginMeta[];
   servers: ServerOption[];
   installedOn: Record<string, string[]>;
 }) {
-  // Track optimistic installs within the session
   const [localInstalls, setLocalInstalls] = useState<Record<string, Set<string>>>({});
 
   function handleInstalled(pluginId: string, serverId: string) {
-    setLocalInstalls((prev) => {
-      const next = { ...prev };
-      next[pluginId] = new Set([...(prev[pluginId] ?? []), serverId]);
-      return next;
-    });
+    setLocalInstalls((prev) => ({
+      ...prev,
+      [pluginId]: new Set([...(prev[pluginId] ?? []), serverId]),
+    }));
   }
 
   return (
-    <div className="grid gap-6">
+    <div className="grid gap-5">
       {/* Header */}
-      <div>
-        <div className="flex items-center gap-2">
-          <h1 className="text-2xl font-bold text-white">Exclusive Plugins</h1>
-          <span className="flex items-center gap-1 rounded-full bg-orange-500/15 px-2.5 py-1 text-xs font-semibold text-orange-300">
-            <Lock className="h-3 w-3" /> MyRcon Only
-          </span>
+      <div className="flex items-center gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold text-white">Exclusive Plugins</h1>
+            <span className="flex items-center gap-1 rounded-full border border-orange-500/20 bg-orange-500/10 px-2 py-0.5 text-[10px] font-semibold text-orange-400">
+              <Lock className="h-2.5 w-2.5" /> MyRcon Only
+            </span>
+          </div>
+          <p className="mt-0.5 text-xs text-slate-500">
+            Install exclusive plugins to your server in one click, then manage permissions from here.
+          </p>
         </div>
-        <p className="mt-1 text-sm text-slate-400">
-          Plugins built by MyRcon — available exclusively in this software. Install them directly
-          to your Rust server via SFTP with one click, then manage permissions from here.
-        </p>
+        <ChevronRight className="ml-auto h-4 w-4 shrink-0 text-slate-700" />
       </div>
 
-      {/* Plugin list */}
       {plugins.length === 0 ? (
-        <Panel>
-          <p className="py-8 text-center text-sm text-slate-500">No exclusive plugins available yet.</p>
-        </Panel>
+        <div className="rounded-xl border border-white/[0.06] bg-[#0d1117] py-12 text-center text-sm text-slate-600">
+          No exclusive plugins available yet.
+        </div>
       ) : (
-        <div className="grid gap-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {plugins.map((plugin) => {
-            const serverIds = new Set([
-              ...(installedOn[plugin.id] ?? []),
-              ...(localInstalls[plugin.id] ?? []),
-            ]);
+            const ids = new Set([...(installedOn[plugin.id] ?? []), ...(localInstalls[plugin.id] ?? [])]);
             return (
               <PluginCard
-                key={plugin.id}
-                plugin={plugin}
-                servers={servers}
-                installedServerIds={serverIds}
+                key={plugin.id} plugin={plugin} servers={servers}
+                installedServerIds={ids}
                 onInstalled={(sid) => handleInstalled(plugin.id, sid)}
               />
             );

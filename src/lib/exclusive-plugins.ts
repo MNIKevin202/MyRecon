@@ -9,10 +9,11 @@ export type ExclusivePlugin = {
   description: string;
   longDescription: string;
   tags: string[];
-  filename: string;       // what the .cs file is named on the server
-  defaultPath: string;    // relative to sftpRootPath (or sftpDefaultPluginPath parent)
-  permissions: string[];  // Oxide/Carbon permission nodes this plugin uses
-  content: string;        // the actual .cs source
+  filename: string;        // what the .cs file is named on the server
+  defaultPath: string;     // relative to sftpRootPath (or sftpDefaultPluginPath parent)
+  permissions: string[];   // Oxide/Carbon permission nodes this plugin uses
+  previewItems: string[];  // item shortnames shown as preview images (like F1 menu)
+  content: string;         // the actual .cs source
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -359,6 +360,11 @@ export const EXCLUSIVE_PLUGINS: ExclusivePlugin[] = [
     filename: "MyRconAdminPanel.cs",
     defaultPath: "oxide/plugins/MyRconAdminPanel.cs",
     permissions: ["myrconadminpanel.use"],
+    previewItems: [
+      "rifle.ak", "rifle.bolt", "lmg.m249", "rocket.launcher",
+      "explosive.timed", "metal.facemask", "metal.plate.torso", "jackhammer",
+      "metal.refined", "scrap", "ammo.rifle", "grenade.f1",
+    ],
     content: ADMIN_PANEL_CS,
   },
 ];
