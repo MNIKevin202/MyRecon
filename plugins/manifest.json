@@ -16,7 +16,7 @@
     ]
   },
   "reclaim": {
-    "version": "1.0.3",
+    "version": "1.0.4",
     "contentUrl": "https://raw.githubusercontent.com/MNIKevin202/MyRecon/main/plugins/MyRconReclaim.cs",
     "name": "Reclaim",
     "description": "PvE server cleanup and abandoned asset management. Detect abandoned bases, unused vehicles, and orphaned deployables.",

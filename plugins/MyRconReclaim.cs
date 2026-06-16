@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("MyRconReclaim", "MyRcon", "1.0.3")]
+    [Info("MyRconReclaim", "MyRcon", "1.0.4")]
     [Description("PvE server cleanup and abandoned asset management for MyRCON")]
     public class MyRconReclaim : RustPlugin
     {
@@ -269,10 +269,10 @@ namespace Oxide.Plugins
                     if (entity == null) continue;
 
                     // ── TC / base ─────────────────────────────────────────────
-                    var tc = entity as BuildingPrivilege;
-                    if (tc != null)
+                    if (entity.ShortPrefabName == "cupboard.tool.deployed")
                     {
                         var entry = ClassifyBase(entity, now);
+                        if (entry == null) continue;
                         summary.TotalBases++;
                         if (entry.Status == "Abandoned" || entry.Status == "CleanupReady") summary.AbandonedBases++;
                         if (entry.Status == "CleanupReady") summary.CleanupReadyBases++;
@@ -331,30 +331,36 @@ namespace Oxide.Plugins
 
         BaseEntry ClassifyBase(BaseEntity tcBase, long now)
         {
-            var tc = tcBase as BuildingPrivilege;
-            if (tc == null) return null;
-            string netId    = tc.net.ID.Value.ToString();
-            string ownerId  = tc.OwnerID.ToString();
-            string ownerName = GetPlayerName(tc.OwnerID);
+            if (tcBase == null) return null;
+            dynamic tc = tcBase;
+            string netId    = tcBase.net.ID.Value.ToString();
+            string ownerId  = tcBase.OwnerID.ToString();
+            string ownerName = GetPlayerName(tcBase.OwnerID);
             bool   prot     = _data.Protected.Contains(netId);
             bool   ignored  = _data.Ignored.Contains(netId);
 
             int blockCount = 0;
             try
             {
-                var building = tc.GetBuilding();
-                if (building?.buildingBlocks != null) blockCount = building.buildingBlocks.Count;
+                dynamic building = tc.GetBuilding();
+                if (building != null && building.buildingBlocks != null) blockCount = (int)building.buildingBlocks.Count;
             }
             catch { }
 
-            bool upkeepEmpty = tc.inventory == null || tc.inventory.itemList.Count == 0;
+            bool upkeepEmpty = true;
+            try { upkeepEmpty = tc.inventory == null || tc.inventory.itemList.Count == 0; } catch { }
 
             long ownerSeen   = GetLastSeen(ownerId);
-            long entityTouch = GetLastTouch(tc.net.ID.Value);
+            long entityTouch = GetLastTouch(tcBase.net.ID.Value);
             long authSeen    = 0;
-            if (tc.authorizedPlayers != null)
-                foreach (var a in tc.authorizedPlayers)
-                { long t = GetLastSeen(a.userid.ToString()); if (t > authSeen) authSeen = t; }
+            try
+            {
+                dynamic auth = tc.authorizedPlayers;
+                if (auth != null)
+                    foreach (dynamic a in auth)
+                    { long t = GetLastSeen(((ulong)a.userid).ToString()); if (t > authSeen) authSeen = t; }
+            }
+            catch { }
             long activity  = Math.Max(ownerSeen, Math.Max(entityTouch, authSeen));
             double daysSince = activity > 0 ? (now - activity) / 86400.0 : double.MaxValue;
 
@@ -362,7 +368,7 @@ namespace Oxide.Plugins
             if (prot) {
                 status = "Protected"; risk = "High"; reason = "Manually protected";
             }
-            else if (IsOwnerProtected(tc.OwnerID)) {
+            else if (IsOwnerProtected(tcBase.OwnerID)) {
                 status = "Protected"; risk = "High"; reason = "Owner is admin or recently active";
             }
             else if (daysSince >= _cfg.AbandonedBaseDays && upkeepEmpty) {
@@ -392,10 +398,10 @@ namespace Oxide.Plugins
                 Risk         = risk,
                 LastActivity = activity > 0 ? UnixToIso(activity) : null,
                 EntityCount  = blockCount,
-                Grid         = GetGrid(tc.transform.position),
-                X = tc.transform.position.x,
-                Y = tc.transform.position.y,
-                Z = tc.transform.position.z,
+                Grid         = GetGrid(tcBase.transform.position),
+                X = tcBase.transform.position.x,
+                Y = tcBase.transform.position.y,
+                Z = tcBase.transform.position.z,
                 UpkeepEmpty  = upkeepEmpty,
                 FlagReason   = reason,
                 IsProtected  = prot,
@@ -490,10 +496,10 @@ namespace Oxide.Plugins
                 if (entry.IsProtected || entry.IsIgnored) continue;
 
                 ulong netId; if (!ulong.TryParse(entry.Id, out netId)) continue;
-                var tc = FindEntity(netId) as BuildingPrivilege;
-                if (tc == null || tc.IsDestroyed) continue;
+                var tcEnt = FindEntity(netId);
+                if (tcEnt == null || tcEnt.IsDestroyed) continue;
 
-                int killed = KillBase(tc);
+                int killed = KillBase(tcEnt);
                 count += killed;
 
                 _data.History.Insert(0, new CleanupEntry {
@@ -510,20 +516,20 @@ namespace Oxide.Plugins
 
         int KillBase(BaseEntity tcBase)
         {
-            var tc = tcBase as BuildingPrivilege;
-            if (tc == null) return 0;
+            if (tcBase == null) return 0;
+            dynamic tc = tcBase;
             int count = 0;
             try
             {
-                var building = tc.GetBuilding();
-                if (building?.buildingBlocks != null)
+                dynamic building = tc.GetBuilding();
+                if (building != null && building.buildingBlocks != null)
                 {
                     var blocks = new List<BuildingBlock>(building.buildingBlocks);
                     foreach (var b in blocks) { if (!b.IsDestroyed) { b.Kill(); count++; } }
                 }
             }
             catch { }
-            if (!tc.IsDestroyed) { tc.Kill(); count++; }
+            if (!tcBase.IsDestroyed) { tcBase.Kill(); count++; }
             return count;
         }
 
@@ -766,9 +772,8 @@ namespace Oxide.Plugins
             string type  = entity.ShortPrefabName;
             int    count = 1;
 
-            var tc = entity as BuildingPrivilege;
-            if (tc != null) { type = "Base"; count = KillBase(tc); }
-            else            { entity.Kill(); }
+            if (entity.ShortPrefabName == "cupboard.tool.deployed") { type = "Base"; count = KillBase(entity); }
+            else { entity.Kill(); }
 
             string admin = arg.IsRcon ? "RCON/Panel" : (arg.Player() != null ? arg.Player().displayName : "Console");
             _data.History.Insert(0, new CleanupEntry {
@@ -844,7 +849,8 @@ namespace Oxide.Plugins
         bool IsTrackedDeployable(BaseEntity e)
         {
             if (e == null) return false;
-            if (e is BuildingBlock || e is BuildingPrivilege || e is BasePlayer) return false;
+            if (e is BuildingBlock || e is BasePlayer) return false;
+            if (e.ShortPrefabName == "cupboard.tool.deployed") return false;
             if (e.OwnerID == 0) return false;  // filters NPCs, world entities, etc.
             if (e is BaseVehicle) return false;
             string name = e.ShortPrefabName;
