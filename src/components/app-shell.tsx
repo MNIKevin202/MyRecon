@@ -18,6 +18,7 @@ import {
   MessageSquare,
   PlugZap,
   Recycle,
+  ScanSearch,
   ScrollText,
   Server,
   Settings,
@@ -55,6 +56,7 @@ const navSections: NavSection[] = [
       { href: "/admin-panel",        label: "Admin Panel",       icon: LayoutGrid },
       { href: "/exclusive-plugins",  label: "Exclusive Plugins", icon: Lock },
       { href: "/reclaim",            label: "Reclaim",           icon: Recycle },
+      { href: "/structure-iq",       label: "StructureIQ",       icon: ScanSearch },
     ],
   },
 ];
