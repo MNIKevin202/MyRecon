@@ -508,8 +508,8 @@ namespace Oxide.Plugins
 
             // Version label
             ui.Add(new CuiLabel {
-                Text          = { Text = "v" + PluginVersion, FontSize = 8, Align = TextAnchor.MiddleRight, Color = CDim, Font = "robotocondensed-regular.ttf" },
-                RectTransform = { AnchorMin = "0.840 0.1", AnchorMax = "0.930 0.9" }
+                Text          = { Text = "v" + PluginVersion, FontSize = 14, Align = TextAnchor.MiddleRight, Color = CMuted, Font = "robotocondensed-regular.ttf" },
+                RectTransform = { AnchorMin = "0.820 0.1", AnchorMax = "0.935 0.9" }
             }, "MRAP_H");
 
             // Close button
