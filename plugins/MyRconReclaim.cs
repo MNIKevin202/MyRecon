@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("MyRconReclaim", "MyRcon", "1.0.4")]
+    [Info("MyRconReclaim", "MyRcon", "1.0.5")]
     [Description("PvE server cleanup and abandoned asset management for MyRCON")]
     public class MyRconReclaim : RustPlugin
     {
@@ -332,7 +332,6 @@ namespace Oxide.Plugins
         BaseEntry ClassifyBase(BaseEntity tcBase, long now)
         {
             if (tcBase == null) return null;
-            dynamic tc = tcBase;
             string netId    = tcBase.net.ID.Value.ToString();
             string ownerId  = tcBase.OwnerID.ToString();
             string ownerName = GetPlayerName(tcBase.OwnerID);
@@ -342,23 +341,36 @@ namespace Oxide.Plugins
             int blockCount = 0;
             try
             {
-                dynamic building = tc.GetBuilding();
-                if (building != null && building.buildingBlocks != null) blockCount = (int)building.buildingBlocks.Count;
+                var building = ReflInvoke(tcBase, "GetBuilding");
+                if (building != null)
+                {
+                    var blocks = ReflGet(building, "buildingBlocks");
+                    if (blocks != null) blockCount = (int)ReflGet(blocks, "Count");
+                }
             }
             catch { }
 
             bool upkeepEmpty = true;
-            try { upkeepEmpty = tc.inventory == null || tc.inventory.itemList.Count == 0; } catch { }
+            try
+            {
+                var sc = tcBase as StorageContainer;
+                upkeepEmpty = sc?.inventory == null || sc.inventory.itemList.Count == 0;
+            }
+            catch { }
 
             long ownerSeen   = GetLastSeen(ownerId);
             long entityTouch = GetLastTouch(tcBase.net.ID.Value);
             long authSeen    = 0;
             try
             {
-                dynamic auth = tc.authorizedPlayers;
+                var auth = ReflGet(tcBase, "authorizedPlayers") as System.Collections.IEnumerable;
                 if (auth != null)
-                    foreach (dynamic a in auth)
-                    { long t = GetLastSeen(((ulong)a.userid).ToString()); if (t > authSeen) authSeen = t; }
+                    foreach (var a in auth)
+                    {
+                        var uid = (ulong)ReflGet(a, "userid");
+                        long t = GetLastSeen(uid.ToString());
+                        if (t > authSeen) authSeen = t;
+                    }
             }
             catch { }
             long activity  = Math.Max(ownerSeen, Math.Max(entityTouch, authSeen));
@@ -517,15 +529,19 @@ namespace Oxide.Plugins
         int KillBase(BaseEntity tcBase)
         {
             if (tcBase == null) return 0;
-            dynamic tc = tcBase;
             int count = 0;
             try
             {
-                dynamic building = tc.GetBuilding();
-                if (building != null && building.buildingBlocks != null)
+                var building = ReflInvoke(tcBase, "GetBuilding");
+                if (building != null)
                 {
-                    var blocks = new List<BuildingBlock>(building.buildingBlocks);
-                    foreach (var b in blocks) { if (!b.IsDestroyed) { b.Kill(); count++; } }
+                    var blocksObj = ReflGet(building, "buildingBlocks") as System.Collections.IEnumerable;
+                    if (blocksObj != null)
+                    {
+                        var blocks = new List<BuildingBlock>();
+                        foreach (var b in blocksObj) { if (b is BuildingBlock bb) blocks.Add(bb); }
+                        foreach (var b in blocks) { if (!b.IsDestroyed) { b.Kill(); count++; } }
+                    }
                 }
             }
             catch { }
@@ -866,7 +882,7 @@ namespace Oxide.Plugins
             if (e is ModularCar) return "Modular Car";
             if (e is RidableHorse) return "Horse";
             if (e is Snowmobile) return "Snowmobile";
-            if (e is MotorBoat) return e.ShortPrefabName.Contains("rhib") ? "RHIB" : "Boat";
+            if (e.ShortPrefabName.Contains("rowboat") || e.ShortPrefabName.Contains("rhib")) return e.ShortPrefabName.Contains("rhib") ? "RHIB" : "Boat";
             return e.ShortPrefabName;
         }
 
@@ -900,6 +916,23 @@ namespace Oxide.Plugins
         }
 
         void TrimHistory() { if (_data.History.Count > 1000) _data.History = _data.History.Take(1000).ToList(); }
+
+        static object ReflGet(object obj, string name)
+        {
+            if (obj == null) return null;
+            var t = obj.GetType();
+            var p = t.GetProperty(name, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+            if (p != null) return p.GetValue(obj);
+            var f = t.GetField(name, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+            return f?.GetValue(obj);
+        }
+
+        static object ReflInvoke(object obj, string method, params object[] args)
+        {
+            if (obj == null) return null;
+            var m = obj.GetType().GetMethod(method, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+            return m?.Invoke(obj, args);
+        }
 
         static long   UnixNow()          => (long)(DateTime.UtcNow - new DateTime(1970,1,1,0,0,0,DateTimeKind.Utc)).TotalSeconds;
         static string UnixToIso(long ts) => new DateTime(1970,1,1,0,0,0,DateTimeKind.Utc).AddSeconds(ts).ToString("o");
