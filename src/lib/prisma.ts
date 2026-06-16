@@ -32,6 +32,7 @@ function migrationPaths() {
     join(migrationsDir, "20260615000000_server_players", "migration.sql"),
     join(migrationsDir, "20260615000100_command_runs", "migration.sql"),
     join(migrationsDir, "20260616000000_notifications", "migration.sql"),
+    join(migrationsDir, "20260616000100_mod_framework", "migration.sql"),
   ].filter((sqlPath) => existsSync(sqlPath));
 }
 
