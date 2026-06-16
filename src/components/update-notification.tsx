@@ -1,6 +1,5 @@
 "use client";
 
-import { Button } from "@/components/ui";
 import { useEffect, useState } from "react";
 
 type UpdateApi = {
@@ -20,7 +19,7 @@ declare global {
   }
 }
 
-type Status = "idle" | "available" | "downloading" | "downloaded" | "error";
+type Status = "idle" | "available" | "downloading" | "downloaded";
 
 type UpdateState = {
   status: Status;
@@ -40,12 +39,15 @@ export function UpdateNotification() {
 
     const unsubscribers = [
       api.onUpdateAvailable(({ version }) => {
-        setState({ status: "available", version, percent: 0 });
+        // On Windows the download starts automatically, so go straight to downloading.
+        // On macOS we just show a button to open GitHub.
+        setState({ status: isMac ? "available" : "downloading", version, percent: 0 });
       }),
       api.onUpdateDownloadProgress(({ percent }) => {
         setState((current) => ({ ...current, status: "downloading", percent }));
       }),
       api.onUpdateDownloaded(({ version }) => {
+        // Windows: main process will quitAndInstall after 3 s automatically.
         setState({ status: "downloaded", version, percent: 100 });
       }),
       api.onUpdateError(() => {
@@ -53,73 +55,65 @@ export function UpdateNotification() {
       }),
     ];
 
-    return () => {
-      unsubscribers.forEach((fn) => fn());
-    };
+    return () => unsubscribers.forEach((fn) => fn());
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (state.status === "idle") return null;
 
   return (
     <div className="fixed bottom-4 right-4 z-50 w-80 rounded-lg border border-white/10 bg-[#10141d] p-4 shadow-2xl shadow-black/40">
+
+      {/* macOS only — show link to GitHub */}
       {state.status === "available" && (
         <>
           <p className="text-sm font-semibold text-slate-100">Update available — v{state.version}</p>
-          <p className="mt-1 text-xs text-slate-400">
-            {isMac
-              ? "A new version is available on GitHub."
-              : "Ready to download and install."}
-          </p>
+          <p className="mt-1 text-xs text-slate-400">A new version is available on GitHub.</p>
           <div className="mt-3 flex justify-end gap-2">
-            <Button
-              variant="secondary"
+            <button
               onClick={() => {
                 window.myrcon?.skipUpdate(state.version);
                 setState(initialState);
               }}
+              className="rounded-md border border-white/10 px-3 py-1.5 text-xs text-slate-300 hover:bg-white/[0.06]"
             >
               Skip
-            </Button>
-            {isMac ? (
-              <Button onClick={() => window.myrcon?.openReleases()}>
-                Open GitHub
-              </Button>
-            ) : (
-              <Button
-                onClick={() => {
-                  window.myrcon?.installUpdate();
-                  setState((current) => ({ ...current, status: "downloading", percent: 0 }));
-                }}
-              >
-                Install update
-              </Button>
-            )}
+            </button>
+            <button
+              onClick={() => window.myrcon?.openReleases()}
+              className="rounded-md bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-orange-400"
+            >
+              Open GitHub
+            </button>
           </div>
         </>
       )}
 
+      {/* Windows — passive progress bar, no interaction needed */}
       {state.status === "downloading" && (
         <>
           <p className="text-sm font-semibold text-slate-100">Downloading update v{state.version}</p>
-          <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-white/10">
+          <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
             <div
-              className="h-full bg-orange-500 transition-all"
+              className="h-full bg-orange-500 transition-all duration-500"
               style={{ width: `${Math.min(100, Math.max(0, state.percent)).toFixed(0)}%` }}
             />
           </div>
-          <p className="mt-1 text-xs text-slate-400">{Math.round(state.percent)}%</p>
+          <p className="mt-1.5 text-right text-xs text-slate-500">{Math.round(state.percent)}%</p>
         </>
       )}
 
+      {/* Windows — briefly shown before auto-restart */}
       {state.status === "downloaded" && (
         <>
           <p className="text-sm font-semibold text-slate-100">Update v{state.version} ready</p>
-          <p className="mt-1 text-xs text-slate-400">The app will restart and update automatically.</p>
-          <div className="mt-3 flex justify-end">
-            <Button onClick={() => window.myrcon?.quitAndInstall()}>Restart & Update</Button>
+          <p className="mt-1 text-xs text-slate-400">Restarting to apply update…</p>
+          <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+            <div className="h-full w-full bg-orange-500" />
           </div>
         </>
       )}
+
     </div>
   );
 }

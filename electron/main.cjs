@@ -15,7 +15,9 @@ function configureAutoUpdates() {
     return;
   }
 
-  autoUpdater.autoDownload = false;
+  // On Windows: download automatically and install silently.
+  // On macOS: unsigned builds can't self-update, so just notify.
+  autoUpdater.autoDownload = process.platform !== "darwin";
   autoUpdater.autoInstallOnAppQuit = false;
 
   autoUpdater.on("error", (error) => {
@@ -52,6 +54,11 @@ function configureAutoUpdates() {
 
   autoUpdater.on("update-downloaded", (info) => {
     mainWindow?.webContents.send("update:downloaded", { version: info.version });
+    // On Windows, install automatically after a short delay so the renderer
+    // can show the "Installing..." message before the app closes.
+    if (process.platform !== "darwin") {
+      setTimeout(() => autoUpdater.quitAndInstall(true, true), 3000);
+    }
   });
 
   ipcMain.on("update:quit-and-install", () => {
