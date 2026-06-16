@@ -13,6 +13,7 @@ export default async function ServersPage() {
       gamePort: true,
       rconPort: true,
       rconType: true,
+      modFramework: true,
       sftpEnabled: true,
       sftpHost: true,
       sftpPort: true,
