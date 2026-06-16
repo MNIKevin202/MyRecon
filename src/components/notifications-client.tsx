@@ -27,7 +27,7 @@ type Tab = "history" | "settings";
 
 const TYPE_ICONS: Record<string, React.ReactNode> = {
   server_offline: <WifiOff className="h-4 w-4 text-red-400" />,
-  server_online: <CheckCircle className="h-4 w-4 text-emerald-400" />,
+  server_restart: <CheckCircle className="h-4 w-4 text-emerald-400" />,
   fps_low: <AlertTriangle className="h-4 w-4 text-amber-400" />,
   high_memory: <AlertTriangle className="h-4 w-4 text-amber-400" />,
   player_join: <Info className="h-4 w-4 text-blue-400" />,

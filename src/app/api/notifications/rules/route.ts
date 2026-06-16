@@ -3,12 +3,12 @@ import { requireUser } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 
 const DEFAULT_RULES = [
-  { type: "server_offline",  enabled: true,  threshold: null,  label: "Server goes offline" },
-  { type: "server_online",   enabled: true,  threshold: null,  label: "Server comes back online" },
+  { type: "server_offline",  enabled: true,  threshold: null,  label: "Server goes down" },
+  { type: "server_restart",  enabled: true,  threshold: null,  label: "Server restarts / comes back online" },
+  { type: "player_join",     enabled: true,  threshold: null,  label: "Player joins the server" },
+  { type: "player_leave",    enabled: true,  threshold: null,  label: "Player leaves the server" },
   { type: "fps_low",         enabled: true,  threshold: 10,    label: "FPS drops below threshold" },
   { type: "high_memory",     enabled: false, threshold: 3000,  label: "Memory exceeds threshold (MB)" },
-  { type: "player_join",     enabled: false, threshold: null,  label: "Player joins the server" },
-  { type: "player_leave",    enabled: false, threshold: null,  label: "Player leaves the server" },
 ];
 
 export async function GET(request: NextRequest) {

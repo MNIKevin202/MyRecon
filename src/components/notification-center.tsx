@@ -19,7 +19,7 @@ type Toast = AppNotification & { exiting?: boolean };
 
 function toastIcon(type: string) {
   if (type === "server_offline") return <WifiOff className="h-4 w-4 text-red-400" />;
-  if (type === "server_online") return <CheckCircle className="h-4 w-4 text-emerald-400" />;
+  if (type === "server_restart") return <CheckCircle className="h-4 w-4 text-emerald-400" />;
   if (type === "fps_low") return <AlertTriangle className="h-4 w-4 text-amber-400" />;
   if (type === "high_memory") return <AlertTriangle className="h-4 w-4 text-amber-400" />;
   return <Info className="h-4 w-4 text-blue-400" />;
