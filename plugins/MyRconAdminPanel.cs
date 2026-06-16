@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("MyRconAdminPanel", "MyRcon", "1.7.0")]
+    [Info("MyRconAdminPanel", "MyRcon", "1.7.1")]
     [Description("MyRcon exclusive in-game admin dashboard")]
     public class MyRconAdminPanel : RustPlugin
     {
@@ -50,7 +50,7 @@ namespace Oxide.Plugins
         private const string CCooldown   = "0.55 0.18 0.08 1";
 
         // ── Plugin version (shown in header for update confirmation) ──────────
-        private const string PluginVersion = "1.7.0";
+        private const string PluginVersion = "1.7.1";
 
         // ── Rate limiting ─────────────────────────────────────────────────────
         private const double GiveCooldownSecs = 2.0;
@@ -536,13 +536,13 @@ namespace Oxide.Plugins
         //  HOME SCREEN
         // ═══════════════════════════════════════════════════════════════════════
 
-        private struct Tile { public string Screen; public string Title; public string Desc; public string[] Items; public string Accent; public string AccentDim; }
+        private struct Tile { public string Screen; public string Title; public string Desc; public string Letter; public string Accent; public string AccentDim; public string AccentDeep; }
 
         private static readonly Tile[] Tiles = {
-            new Tile { Screen = ScrGive,    Title = "Give Items",    Desc = "Give any item to any online player", Items = new[]{"rifle.ak","explosive.timed","metal.facemask","scrap"},              Accent = COrange, AccentDim = COrangeDim },
-            new Tile { Screen = ScrPlayers, Title = "Players",       Desc = "Teleport, heal, kick, ban players",  Items = new[]{"coffeecan.helmet","hoodie","pants","shoes.boots"},                  Accent = CBlue,   AccentDim = CBlueDim   },
-            new Tile { Screen = ScrServer,  Title = "Server",        Desc = "Quick server commands & tools",      Items = new[]{"hammer","furnace","workbench1","box.wooden.large"},                  Accent = CGreen,  AccentDim = CGreenDim  },
-            new Tile { Screen = "",         Title = "Coming Soon",   Desc = "More tools being added",             Items = new string[0],                                                             Accent = CDim,    AccentDim = "0 0 0 0"  },
+            new Tile { Screen = ScrGive,    Title = "Give Items",  Desc = "Give any item to any online player", Letter = "G", Accent = COrange, AccentDim = COrangeDim, AccentDeep = COrangeDeep },
+            new Tile { Screen = ScrPlayers, Title = "Players",     Desc = "Teleport, heal, kick, ban players",  Letter = "P", Accent = CBlue,   AccentDim = CBlueDim,   AccentDeep = CBlueDeep   },
+            new Tile { Screen = ScrServer,  Title = "Server",      Desc = "Quick server commands & tools",      Letter = "S", Accent = CGreen,  AccentDim = CGreenDim,  AccentDeep = CGreenDeep  },
+            new Tile { Screen = "",         Title = "Coming Soon", Desc = "More tools being added",             Letter = "?", Accent = CDim,    AccentDim = "0 0 0 0",  AccentDeep = CPanel      },
         };
 
         void DrawHome(CuiElementContainer ui, S s) {
@@ -554,95 +554,73 @@ namespace Oxide.Plugins
                 RectTransform = { AnchorMin = "0.03 0.908", AnchorMax = "0.65 0.965" }
             }, UiBody);
             ui.Add(new CuiLabel {
-                Text          = { Text = $"{online} online", FontSize = 11, Align = TextAnchor.MiddleRight, Color = online > 0 ? "0.30 0.74 0.40 1" : CDim, Font = "robotocondensed-bold.ttf" },
+                Text          = { Text = string.Format("{0} online", online), FontSize = 11, Align = TextAnchor.MiddleRight, Color = online > 0 ? "0.30 0.74 0.40 1" : CDim, Font = "robotocondensed-bold.ttf" },
                 RectTransform = { AnchorMin = "0.65 0.908", AnchorMax = "0.97 0.965" }
             }, UiBody);
             ui.Add(new CuiPanel { Image = { Color = CDivider }, RectTransform = { AnchorMin = "0.025 0.902", AnchorMax = "0.975 0.908" } }, UiBody);
 
-            // Deep icon-bg colours — one per tile slot
-            string[] deepBg = { COrangeDeep, CBlueDeep, CGreenDeep, "0.055 0.065 0.082 1" };
-
-            const float padX = 0.022f;
-            const float gapX = 0.016f;
-            const float gapY = 0.016f;
-            float tileW = (1f - 2f*padX - gapX) / 2f;
-            float tileH = (0.90f - 0.04f - gapY) / 2f;
+            // Horizontal cards — 3 main + 1 small coming-soon strip
+            // Available body: y=0.04 to y=0.898
+            float[] cardY1 = { 0.895f, 0.660f, 0.425f, 0.190f };
+            float[] cardY0 = { 0.672f, 0.437f, 0.202f, 0.050f };
 
             for (int i = 0; i < Tiles.Length; i++) {
-                var t       = Tiles[i];
-                int col     = i % 2;
-                int row     = i / 2;
-                float x0    = padX + col * (tileW + gapX);
-                float y1    = 0.90f - row * (tileH + gapY);
-                float y0    = y1 - tileH;
-                string tn   = $"MRAP_T{i}";
+                var t      = Tiles[i];
+                string tn  = string.Format("MRAP_T{0}", i);
                 bool future = string.IsNullOrEmpty(t.Screen);
+                float y0   = cardY0[i];
+                float y1   = cardY1[i];
 
-                // Card shell
+                // Card background
                 ui.Add(new CuiPanel {
                     Image         = { Color = CPanel },
-                    RectTransform = { AnchorMin = $"{x0:F3} {y0:F3}", AnchorMax = $"{x0+tileW:F3} {y1:F3}" }
+                    RectTransform = { AnchorMin = string.Format("0.025 {0:F3}", y0), AnchorMax = string.Format("0.975 {0:F3}", y1) }
                 }, UiBody, tn);
 
-                // Top half: coloured deep bg (gives each card a distinct identity)
-                string topColor = future ? "0.055 0.065 0.082 1" : deepBg[i];
+                // Left accent block — solid color with large initial letter
                 ui.Add(new CuiPanel {
-                    Image         = { Color = topColor },
-                    RectTransform = { AnchorMin = "0 0.48", AnchorMax = "1 1" }
-                }, tn, $"{tn}_top");
-
-                // Centered item icon in the top section
-                if (!future && t.Items.Length > 0) {
-                    var def = ItemManager.FindItemDefinition(t.Items[0]);
-                    if (def != null) {
-                        ui.Add(new CuiElement {
-                            Parent     = $"{tn}_top",
-                            Components = {
-                                new CuiImageComponent { ItemId = def.itemid, SkinId = 0 },
-                                new CuiRectTransformComponent { AnchorMin = "0.37 0.10", AnchorMax = "0.63 0.90" }
-                            }
-                        });
-                    }
-                }
-
-                // Thin accent separator between top and bottom
+                    Image         = { Color = future ? CCell : t.AccentDeep },
+                    RectTransform = { AnchorMin = "0 0", AnchorMax = "0.12 1" }
+                }, tn, string.Format("{0}_ab", tn));
+                // Thin right edge on accent block
                 ui.Add(new CuiPanel {
                     Image         = { Color = future ? CDivider : t.Accent },
-                    RectTransform = { AnchorMin = "0 0.476", AnchorMax = "1 0.485" }
-                }, tn);
-
-                // Title — large, bold, white
+                    RectTransform = { AnchorMin = "0.94 0.08", AnchorMax = "1.0 0.92" }
+                }, string.Format("{0}_ab", tn));
+                // Letter
                 ui.Add(new CuiLabel {
-                    Text          = { Text = t.Title, FontSize = 16, Align = TextAnchor.UpperLeft, Color = future ? CDim : CText, Font = "robotocondensed-bold.ttf" },
-                    RectTransform = { AnchorMin = "0.06 0.27", AnchorMax = "0.97 0.47" }
+                    Text          = { Text = t.Letter, FontSize = future ? 16 : 28, Align = TextAnchor.MiddleCenter, Color = future ? CDim : t.Accent, Font = "robotocondensed-bold.ttf" },
+                    RectTransform = { AnchorMin = "0 0", AnchorMax = "0.94 1" }
+                }, string.Format("{0}_ab", tn));
+
+                // Title
+                ui.Add(new CuiLabel {
+                    Text          = { Text = t.Title, FontSize = future ? 12 : 17, Align = TextAnchor.MiddleLeft, Color = future ? CDim : CText, Font = "robotocondensed-bold.ttf" },
+                    RectTransform = { AnchorMin = "0.145 0.52", AnchorMax = "0.82 0.92" }
                 }, tn);
 
                 // Description
                 ui.Add(new CuiLabel {
-                    Text          = { Text = t.Desc, FontSize = 10, Align = TextAnchor.UpperLeft, Color = CDim, Font = "robotocondensed-regular.ttf" },
-                    RectTransform = { AnchorMin = "0.06 0.11", AnchorMax = "0.97 0.27" }
+                    Text          = { Text = t.Desc, FontSize = 10, Align = TextAnchor.MiddleLeft, Color = CMuted, Font = "robotocondensed-regular.ttf" },
+                    RectTransform = { AnchorMin = "0.145 0.12", AnchorMax = "0.82 0.52" }
                 }, tn);
 
-                // Footer CTA or "SOON" badge
+                // CTA or coming-soon badge
                 if (!future) {
                     ui.Add(new CuiLabel {
-                        Text          = { Text = "Open  >", FontSize = 10, Align = TextAnchor.MiddleLeft, Color = t.Accent, Font = "robotocondensed-bold.ttf" },
-                        RectTransform = { AnchorMin = "0.06 0.02", AnchorMax = "0.50 0.12" }
+                        Text          = { Text = "Open  >", FontSize = 11, Align = TextAnchor.MiddleRight, Color = t.Accent, Font = "robotocondensed-bold.ttf" },
+                        RectTransform = { AnchorMin = "0.82 0.15", AnchorMax = "0.985 0.85" }
                     }, tn);
                     ui.Add(new CuiButton {
-                        Button        = { Command = $"mrap.nav {t.Screen}", Color = "0 0 0 0" },
+                        Button        = { Command = string.Format("mrap.nav {0}", t.Screen), Color = "0 0 0 0" },
                         RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1" },
                         Text          = { Text = "" }
                     }, tn);
                 } else {
-                    ui.Add(new CuiPanel {
-                        Image         = { Color = CCell },
-                        RectTransform = { AnchorMin = "0.06 0.03", AnchorMax = "0.32 0.13" }
-                    }, tn, $"{tn}_sp");
                     ui.Add(new CuiLabel {
-                        Text          = { Text = "COMING SOON", FontSize = 7, Align = TextAnchor.MiddleCenter, Color = CDim, Font = "robotocondensed-bold.ttf" },
-                        RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1" }
-                    }, $"{tn}_sp");
+                        Text          = { Text = "COMING SOON", FontSize = 8, Align = TextAnchor.MiddleRight, Color = CDim, Font = "robotocondensed-bold.ttf" },
+                        RectTransform = { AnchorMin = "0.82 0.15", AnchorMax = "0.985 0.85" }
+                    }, tn);
                 }
             }
         }
