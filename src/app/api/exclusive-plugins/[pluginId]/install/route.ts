@@ -28,11 +28,14 @@ export async function POST(request: NextRequest, { params }: Params) {
   }
 
   // Resolve install path
+  // Priority: explicit override → framework-based default → plugin's own defaultPath
   let installPath: string;
   if (server.sftpDefaultPluginPath) {
     installPath = `${server.sftpDefaultPluginPath.replace(/\/$/, "")}/${plugin.filename}`;
   } else if (server.sftpRootPath) {
-    installPath = `${server.sftpRootPath.replace(/\/$/, "")}/${plugin.defaultPath}`;
+    const framework = (server.modFramework ?? "oxide") as "oxide" | "carbon";
+    const frameworkPath = framework === "carbon" ? "carbon/plugins" : "oxide/plugins";
+    installPath = `${server.sftpRootPath.replace(/\/$/, "")}/${frameworkPath}/${plugin.filename}`;
   } else {
     return NextResponse.json(
       { error: "Server has no SFTP root path configured. Set it in Server Settings." },

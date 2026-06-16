@@ -23,6 +23,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   const server = await prisma.serverProfile.update({
     where: { id: serverId },
     data: {
+      modFramework: input.modFramework,
       sftpEnabled: input.sftpEnabled,
       sftpHost: input.sftpHost || null,
       sftpPort: input.sftpPort,
@@ -36,6 +37,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     },
     select: {
       id: true,
+      modFramework: true,
       sftpEnabled: true,
       sftpHost: true,
       sftpPort: true,

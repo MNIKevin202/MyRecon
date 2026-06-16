@@ -52,6 +52,7 @@ model ServerProfile {
   sftpPasswordEncrypted String?
   sftpPrivateKeyEncrypted String?
   sftpRootPath          String?
+  modFramework          String           @default("oxide")
   sftpDefaultPluginPath String?
   sftpDefaultConfigPath String?
   sftpAllowOutsideRoot  Boolean          @default(false)

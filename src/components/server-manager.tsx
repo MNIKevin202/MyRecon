@@ -12,6 +12,7 @@ type Server = {
   gamePort: number;
   rconPort: number;
   rconType: string;
+  modFramework: string;
   sftpEnabled: boolean;
   sftpHost: string | null;
   sftpPort: number;
@@ -32,6 +33,7 @@ const blank = {
   rconType: "WEBRCON",
   rconPassword: "",
   notes: "",
+  modFramework: "oxide",
   sftpEnabled: false,
   sftpHost: "",
   sftpPort: 22,
@@ -68,6 +70,7 @@ export function ServerManager({ initialServers }: { initialServers: Server[] }) 
       rconType: server.rconType,
       rconPassword: "",
       notes: server.notes ?? "",
+      modFramework: server.modFramework ?? "oxide",
       sftpEnabled: server.sftpEnabled,
       sftpHost: server.sftpHost ?? "",
       sftpPort: server.sftpPort,
@@ -158,6 +161,7 @@ export function ServerManager({ initialServers }: { initialServers: Server[] }) 
     setMessage(null);
     try {
       const payload = {
+        modFramework: form.modFramework,
         sftpEnabled: forceEnabled ? true : form.sftpEnabled,
         sftpHost: form.sftpHost,
         sftpPort: form.sftpPort,
@@ -337,14 +341,20 @@ export function ServerManager({ initialServers }: { initialServers: Server[] }) 
               <Field label="Private key" hint="Optional. Leave blank to keep the saved key.">
                 <textarea className="min-h-24 rounded-md border border-white/10 bg-white/[0.04] p-3 text-sm text-slate-100 outline-none focus:border-orange-400" value={form.sftpPrivateKey} onChange={(event) => update("sftpPrivateKey", event.target.value)} />
               </Field>
+              <Field label="Mod framework" hint="Determines the default plugin install path when no override is set.">
+                <Select value={form.modFramework} onChange={(event) => update("modFramework", event.target.value)}>
+                  <option value="oxide">Oxide</option>
+                  <option value="carbon">Carbon</option>
+                </Select>
+              </Field>
               <Field label="Root path">
                 <Input value={form.sftpRootPath} onChange={(event) => update("sftpRootPath", event.target.value)} placeholder="C:/rustserver" />
               </Field>
-              <Field label="Carbon plugins path">
-                <Input value={form.sftpDefaultPluginPath} onChange={(event) => update("sftpDefaultPluginPath", event.target.value)} placeholder="C:/rustserver/carbon/plugins" />
+              <Field label="Plugin path override" hint="Leave blank to use the default based on Mod framework above.">
+                <Input value={form.sftpDefaultPluginPath} onChange={(event) => update("sftpDefaultPluginPath", event.target.value)} placeholder={form.modFramework === "carbon" ? "C:/rustserver/carbon/plugins" : "C:/rustserver/oxide/plugins"} />
               </Field>
-              <Field label="Carbon config path">
-                <Input value={form.sftpDefaultConfigPath} onChange={(event) => update("sftpDefaultConfigPath", event.target.value)} placeholder="C:/rustserver/carbon/config" />
+              <Field label="Config path override">
+                <Input value={form.sftpDefaultConfigPath} onChange={(event) => update("sftpDefaultConfigPath", event.target.value)} placeholder={form.modFramework === "carbon" ? "C:/rustserver/carbon/config" : "C:/rustserver/oxide/config"} />
               </Field>
             </div>
             <div className="mt-5 flex flex-wrap gap-3">
