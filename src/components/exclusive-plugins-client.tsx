@@ -517,6 +517,28 @@ export function ExclusivePluginsClient({
   const [localVersions, setLocalVersions] = useState<Record<string, Record<string, string>>>({});
   const [localUninstalled, setLocalUninstalled] = useState<Record<string, Set<string>>>({});
 
+  // Poll manifest every 60s and surface new versions to cards without a page reload
+  const [latestVersions, setLatestVersions] = useState<Record<string, string>>({});
+  useEffect(() => {
+    async function poll() {
+      try {
+        const res = await fetch("/api/exclusive-plugins/manifest");
+        if (!res.ok) return;
+        const data = (await res.json()) as Record<string, { version: string }>;
+        setLatestVersions((prev) => {
+          const next = { ...prev };
+          for (const [id, entry] of Object.entries(data)) {
+            if (entry?.version) next[id] = entry.version;
+          }
+          return next;
+        });
+      } catch { /* silent — just wait for next tick */ }
+    }
+    void poll();
+    const id = setInterval(() => void poll(), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
   function handleInstalled(pluginId: string, serverId: string, version: string) {
     setLocalVersions((prev) => ({
       ...prev,
@@ -571,9 +593,13 @@ export function ExclusivePluginsClient({
             const removed = localUninstalled[plugin.id] ?? new Set<string>();
             const merged  = { ...base, ...(localVersions[plugin.id] ?? {}) };
             for (const sid of removed) delete merged[sid];
+            // Overlay the polled manifest version so the card reacts without a page reload
+            const livePlugin = latestVersions[plugin.id]
+              ? { ...plugin, version: latestVersions[plugin.id] }
+              : plugin;
             return (
               <PluginCard
-                key={plugin.id} plugin={plugin} servers={servers}
+                key={plugin.id} plugin={livePlugin} servers={servers}
                 installedVersions={merged}
                 onInstalled={(sid, ver) => handleInstalled(plugin.id, sid, ver)}
                 onUninstalled={(sid) => handleUninstalled(plugin.id, sid)}
