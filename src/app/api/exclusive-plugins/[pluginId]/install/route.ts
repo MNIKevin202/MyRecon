@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { getPlugin } from "@/lib/exclusive-plugins";
 import { writeTextFile } from "@/server/sftp/service";
+import { fireAndForgetCommand } from "@/server/rcon/service";
 
 type Params = { params: Promise<{ pluginId: string }> };
 
@@ -69,7 +70,15 @@ export async function POST(request: NextRequest, { params }: Params) {
       create: { key: `plugin_installed:${pluginId}:${body.serverId}`, value: `${version}|${installPath}` },
     });
     logs.push(`File written successfully`);
-    logs.push(`Oxide/Carbon will load ${plugin.filename} automatically — or use Reload`);
+
+    // Fire reload commands so the plugin activates immediately without a server restart
+    const pluginName = plugin.filename.replace(/\.cs$/i, "");
+    for (const cmd of [`oxide.reload ${pluginName}`, `c.reload ${pluginName}`]) {
+      logs.push(`> ${cmd}`);
+      await fireAndForgetCommand(server, cmd);
+    }
+    logs.push(`Reload commands sent — plugin should be active within a few seconds`);
+
     return NextResponse.json({ success: true, path: installPath, version, logs });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "SFTP write failed";

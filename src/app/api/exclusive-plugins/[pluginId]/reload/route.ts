@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { getPlugin } from "@/lib/exclusive-plugins";
-import { executeServerCommand } from "@/server/rcon/service";
+import { fireAndForgetCommand } from "@/server/rcon/service";
 
 type Params = { params: Promise<{ pluginId: string }> };
 
@@ -20,40 +20,17 @@ export async function POST(request: NextRequest, { params }: Params) {
   const server = await prisma.serverProfile.findUnique({ where: { id: body.serverId } });
   if (!server) return NextResponse.json({ error: "Server not found" }, { status: 404 });
 
-  // Plugin name without extension for the reload command
   const pluginName = plugin.filename.replace(/\.cs$/i, "");
-
   const logs: string[] = [];
 
-  // Try Oxide first, then Carbon — tolerate "unknown command" from whichever isn't installed
-  let raw = "";
-  let usedCommand = "";
-  const errors: string[] = [];
-
-  // Plugin compile can take several seconds — use a generous timeout
-  const reloadTimeoutMs = 30_000;
-
+  // Carbon/Oxide may not send a response to reload commands — fire and forget,
+  // don't wait for a reply that may never come.
   for (const cmd of [`oxide.reload ${pluginName}`, `c.reload ${pluginName}`]) {
     logs.push(`> ${cmd}`);
-    try {
-      raw = await executeServerCommand(server, cmd, reloadTimeoutMs);
-      usedCommand = cmd;
-      break;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      errors.push(msg);
-      logs.push(`  ERROR: ${msg}`);
-    }
+    await fireAndForgetCommand(server, cmd);
   }
 
-  if (!usedCommand) {
-    return NextResponse.json(
-      { error: `Reload failed on both Oxide and Carbon. Last error: ${errors.at(-1) ?? "unknown"}`, logs },
-      { status: 502 },
-    );
-  }
+  logs.push(`Commands sent — plugin should reload within a few seconds`);
 
-  if (raw.trim()) logs.push(raw.trim());
-
-  return NextResponse.json({ success: true, command: usedCommand, output: raw, logs });
+  return NextResponse.json({ success: true, command: `oxide.reload / c.reload ${pluginName}`, logs });
 }

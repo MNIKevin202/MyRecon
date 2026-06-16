@@ -181,6 +181,23 @@ async function persistRconError(server: ServerProfile, details: ReturnType<typeo
   });
 }
 
+// Send command and return without waiting for a response — for commands like
+// oxide.reload / c.reload where Carbon/Oxide may not send a reply.
+export async function fireAndForgetCommand(
+  server: ServerProfile,
+  command: string,
+) {
+  const connectionDetails = getRconConnectionDetails(server);
+  if (connectionDetails.normalizedRconType === "EXPERIMENTAL") return;
+
+  try {
+    // Use a very short timeout — just enough to confirm the socket delivered the frame.
+    await runServerCommand(server, command, connectionDetails.normalizedRconType, 3000);
+  } catch {
+    // Timeout or no-response is expected; swallow it.
+  }
+}
+
 export async function executeServerCommand(
   server: ServerProfile,
   command: string,
