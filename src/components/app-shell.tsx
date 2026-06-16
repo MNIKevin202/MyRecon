@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type React from "react";
@@ -77,13 +78,7 @@ export function AppShell({
       <aside className="min-w-0 border-b border-white/10 bg-[#0c1017] lg:min-h-screen lg:border-b-0 lg:border-r">
         <div className="flex items-center justify-between gap-4 px-4 py-4 lg:block">
           <Link href="/dashboard" className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-orange-500">
-              <Gauge className="h-5 w-5" />
-            </div>
-            <div>
-              <div className="text-base font-bold text-white">MyRcon</div>
-              <div className="text-xs text-slate-500">Rust Admin Panel</div>
-            </div>
+            <Image src="/logo.png" alt="MyRcon Admin Panel" width={44} height={44} className="rounded" priority />
           </Link>
           <button
             onClick={logout}

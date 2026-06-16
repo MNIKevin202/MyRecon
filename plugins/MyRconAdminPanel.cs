@@ -485,19 +485,17 @@ namespace Oxide.Plugins
             // Full-width orange bottom line
             ui.Add(new CuiPanel { Image = { Color = COrange }, RectTransform = { AnchorMin = "0 0", AnchorMax = "1 0.046" } }, "MRAP_H");
 
-            // Solid orange logo block
-            ui.Add(new CuiPanel { Image = { Color = COrange }, RectTransform = { AnchorMin = "0 0.046", AnchorMax = "0.054 1" } }, "MRAP_H", "MRAP_Logo");
-            ui.Add(new CuiLabel {
-                Text          = { Text = "MR", FontSize = 11, Align = TextAnchor.MiddleCenter, Color = "0.06 0.03 0.01 1", Font = "robotocondensed-bold.ttf" },
-                RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1" }
-            }, "MRAP_Logo");
+            // Logo image
+            ui.Add(new CuiElement {
+                Name   = "MRAP_Logo",
+                Parent = "MRAP_H",
+                Components = {
+                    new CuiRawImageComponent { Url = "https://raw.githubusercontent.com/MNIKevin202/MyRecon/main/public/logo.png", Color = "1 1 1 1" },
+                    new CuiRectTransformComponent { AnchorMin = "0.004 0.060", AnchorMax = "0.090 0.940" }
+                }
+            });
 
-            float xC = 0.060f;
-            ui.Add(new CuiLabel {
-                Text          = { Text = "MyRcon", FontSize = 13, Align = TextAnchor.MiddleLeft, Color = CText, Font = "robotocondensed-bold.ttf" },
-                RectTransform = { AnchorMin = string.Format("{0:F3} 0.10", xC), AnchorMax = string.Format("{0:F3} 0.92", xC + 0.090f) }
-            }, "MRAP_H");
-            xC += 0.096f;
+            float xC = 0.096f;
 
             if (s.Screen != ScrHome) {
                 ui.Add(new CuiPanel { Image = { Color = CDivider }, RectTransform = { AnchorMin = string.Format("{0:F3} 0.22", xC), AnchorMax = string.Format("{0:F3} 0.78", xC + 0.002f) } }, "MRAP_H");
