@@ -29,7 +29,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("MyRconAdminPanel", "MyRcon", "1.3.0")]
+    [Info("MyRconAdminPanel", "MyRcon", "1.3.1")]
     [Description("MyRcon exclusive in-game admin dashboard")]
     public class MyRconAdminPanel : RustPlugin
     {
@@ -437,12 +437,11 @@ namespace Oxide.Plugins
                 RectTransform = { AnchorMin = $"{logoX:F3} 0.05", AnchorMax = $"{logoX+0.09f:F3} 0.88" }
             }, "MRAP_H");
 
-            string title = s.Screen switch {
-                ScrGive    => "Give Items",
-                ScrPlayers => "Players",
-                ScrServer  => "Server",
-                _          => "Admin Panel"
-            };
+            string title;
+            if      (s.Screen == ScrGive)    title = "Give Items";
+            else if (s.Screen == ScrPlayers) title = "Players";
+            else if (s.Screen == ScrServer)  title = "Server";
+            else                             title = "Admin Panel";
 
             ui.Add(new CuiPanel { Image = { Color = CDivider }, RectTransform = { AnchorMin = $"{logoX+0.088f:F3} 0.2", AnchorMax = $"{logoX+0.091f:F3} 0.8" } }, "MRAP_H");
             ui.Add(new CuiLabel {
@@ -750,26 +749,22 @@ namespace Oxide.Plugins
                 ui.Add(new CuiLabel { Text = { Text = sel2.UserIDString, FontSize = 8, Align = TextAnchor.LowerLeft, Color = CDim, Font = "robotocondensed-regular.ttf" }, RectTransform = { AnchorMin = "0.06 0.05", AnchorMax = "0.94 0.45" } }, "MRAP_PAH");
 
                 // Action buttons
-                var actions = new[] {
-                    ("teleport_to",   "Teleport To",   "Go to player",          CBlue,   CBlueDim),
-                    ("teleport_here", "Teleport Here", "Bring player to you",   CBlue,   CBlueDim),
-                    ("heal",          "Heal",          "Full health & food",     CGreen,  CGreenDim),
-                    ("strip",         "Strip",         "Clear inventory",        COrange, COrangeDim),
-                    ("kick",          "Kick",          "Remove from server",     CRed,    CRedDim),
-                    ("ban",           "Ban",           "Permanent ban",          CRed,    CRedDim),
-                };
+                string[] aCmds   = { "teleport_to",   "teleport_here",       "heal",              "strip",           "kick",                "ban"           };
+                string[] aLabels = { "Teleport To",   "Teleport Here",       "Heal",              "Strip",           "Kick",                "Ban"           };
+                string[] aDescs  = { "Go to player",  "Bring player to you", "Full health & food","Clear inventory", "Remove from server",  "Permanent ban" };
+                string[] aClrs   = { CBlue,           CBlue,                 CGreen,              COrange,           CRed,                  CRed            };
+                string[] aClrDs  = { CBlueDim,        CBlueDim,              CGreenDim,           COrangeDim,        CRedDim,               CRedDim         };
 
                 const float abH = 0.105f; const float abG = 0.012f;
                 float abTop = 0.875f;
-                for (int i = 0; i < actions.Length; i++) {
-                    var (acmd, alabel, adesc, aclr, aclrDim) = actions[i];
+                for (int i = 0; i < aCmds.Length; i++) {
                     float ay1 = abTop - i * (abH + abG); float ay0 = ay1 - abH;
                     string an = $"MRAP_ACT{i}";
-                    ui.Add(new CuiPanel { Image = { Color = aclrDim }, RectTransform = { AnchorMin = $"0.05 {ay0:F3}", AnchorMax = $"0.95 {ay1:F3}" } }, actN, an);
-                    ui.Add(new CuiPanel { Image = { Color = aclr },    RectTransform = { AnchorMin = "0 0", AnchorMax = "0.018 1" } }, an);
-                    ui.Add(new CuiLabel { Text = { Text = alabel, FontSize = 11, Align = TextAnchor.UpperLeft, Color = CText, Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = "0.06 0.42", AnchorMax = "0.94 0.97" } }, an);
-                    ui.Add(new CuiLabel { Text = { Text = adesc, FontSize = 9, Align = TextAnchor.LowerLeft, Color = CDim, Font = "robotocondensed-regular.ttf" }, RectTransform = { AnchorMin = "0.06 0.03", AnchorMax = "0.94 0.5" } }, an);
-                    ui.Add(new CuiButton { Button = { Command = $"mrap.paction {acmd}", Color = "0 0 0 0" }, RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1" }, Text = { Text = "" } }, an);
+                    ui.Add(new CuiPanel { Image = { Color = aClrDs[i] }, RectTransform = { AnchorMin = $"0.05 {ay0:F3}", AnchorMax = $"0.95 {ay1:F3}" } }, actN, an);
+                    ui.Add(new CuiPanel { Image = { Color = aClrs[i] },  RectTransform = { AnchorMin = "0 0", AnchorMax = "0.018 1" } }, an);
+                    ui.Add(new CuiLabel { Text = { Text = aLabels[i], FontSize = 11, Align = TextAnchor.UpperLeft, Color = CText, Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = "0.06 0.42", AnchorMax = "0.94 0.97" } }, an);
+                    ui.Add(new CuiLabel { Text = { Text = aDescs[i], FontSize = 9, Align = TextAnchor.LowerLeft, Color = CDim, Font = "robotocondensed-regular.ttf" }, RectTransform = { AnchorMin = "0.06 0.03", AnchorMax = "0.94 0.5" } }, an);
+                    ui.Add(new CuiButton { Button = { Command = $"mrap.paction {aCmds[i]}", Color = "0 0 0 0" }, RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1" }, Text = { Text = "" } }, an);
                 }
             }
         }
@@ -779,27 +774,23 @@ namespace Oxide.Plugins
         // ═══════════════════════════════════════════════════════════════════════
 
         void DrawServerScreen(CuiElementContainer ui, S s) {
-            var cmds = new[] {
-                ("save",          "Save Server",    "Write data to disk now",       CGreen,  CGreenDim, new[]{"box.wooden.large"}),
-                ("day",           "Set Day",        "Jump to 9:00 AM",              COrange, COrangeDim, new[]{"torch"}),
-                ("night",         "Set Night",      "Jump to 9:00 PM",              CBlue,   CBlueDim,   new[]{"flashlight.held"}),
-                ("weather_clear", "Clear Weather",  "No rain, fog, or clouds",      CBlue,   CBlueDim,   new[]{"water.bottle"}),
-                ("supply",        "Supply Drop",    "Drop above your position",     COrange, COrangeDim, new[]{"supply.signal"}),
-                ("healall",       "Heal All",       "Full health for everyone",     CGreen,  CGreenDim,  new[]{"syringe.medical"}),
-            };
+            string[] svCmds   = { "save",             "day",              "night",              "weather_clear",          "supply",                    "healall"               };
+            string[] svLabels = { "Save Server",       "Set Day",          "Set Night",          "Clear Weather",          "Supply Drop",               "Heal All"              };
+            string[] svDescs  = { "Write data to disk","Jump to 9:00 AM",  "Jump to 9:00 PM",   "No rain, fog or clouds", "Drop above your position",  "Full health for all"   };
+            string[] svClrs   = { CGreen,              COrange,            CBlue,                CBlue,                    COrange,                     CGreen                  };
+            string[] svClrDs  = { CGreenDim,           COrangeDim,         CBlueDim,             CBlueDim,                 COrangeDim,                  CGreenDim               };
+            string[] svIcons  = { "box.wooden.large",  "torch",            "flashlight.held",    "water.bottle",           "supply.signal",             "syringe.medical"       };
 
             ui.Add(new CuiLabel { Text = { Text = "Quick Commands", FontSize = 11, Align = TextAnchor.MiddleLeft, Color = CMuted, Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = "0.03 0.91", AnchorMax = "0.97 0.97" } }, UiBody);
 
             const int svCols = 2;
-            const float padX = 0.03f; const float padY = 0.04f;
+            const float padX = 0.03f;
             const float gapX = 0.025f; const float gapY = 0.025f;
             float cardW = (1f - 2 * padX - (svCols - 1) * gapX) / svCols;
             float cardH = 0.12f;
-            int svRows = (int)Math.Ceiling(cmds.Length / (float)svCols);
             float startY = 0.895f;
 
-            for (int i = 0; i < cmds.Length; i++) {
-                var (cmd, label, desc, clr, clrDim, icons) = cmds[i];
+            for (int i = 0; i < svCmds.Length; i++) {
                 int col = i % svCols; int row = i / svCols;
                 float x0 = padX + col * (cardW + gapX);
                 float y1 = startY - row * (cardH + gapY);
@@ -807,15 +798,13 @@ namespace Oxide.Plugins
                 string cn = $"MRAP_SV{i}";
 
                 ui.Add(new CuiPanel { Image = { Color = CCell }, RectTransform = { AnchorMin = $"{x0:F3} {y0:F3}", AnchorMax = $"{x0+cardW:F3} {y1:F3}" } }, UiBody, cn);
-                ui.Add(new CuiPanel { Image = { Color = clr },   RectTransform = { AnchorMin = "0 0", AnchorMax = "0.012 1" } }, cn);
-                ui.Add(new CuiPanel { Image = { Color = clrDim }, RectTransform = { AnchorMin = "0.88 0.08", AnchorMax = "0.99 0.92" } }, cn, $"{cn}_icon");
-                if (icons.Length > 0) {
-                    var def = ItemManager.FindItemDefinition(icons[0]);
-                    if (def != null) ui.Add(new CuiElement { Parent = $"{cn}_icon", Components = { new CuiImageComponent { ItemId = def.itemid, SkinId = 0 }, new CuiRectTransformComponent { AnchorMin = "0.08 0.08", AnchorMax = "0.92 0.92" } } });
-                }
-                ui.Add(new CuiLabel { Text = { Text = label, FontSize = 12, Align = TextAnchor.UpperLeft, Color = CText, Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = "0.05 0.42", AnchorMax = "0.85 0.97" } }, cn);
-                ui.Add(new CuiLabel { Text = { Text = desc, FontSize = 9, Align = TextAnchor.LowerLeft, Color = CDim, Font = "robotocondensed-regular.ttf" }, RectTransform = { AnchorMin = "0.05 0.03", AnchorMax = "0.85 0.46" } }, cn);
-                ui.Add(new CuiButton { Button = { Command = $"mrap.svcmd {cmd}", Color = "0 0 0 0" }, RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1" }, Text = { Text = "" } }, cn);
+                ui.Add(new CuiPanel { Image = { Color = svClrs[i] },  RectTransform = { AnchorMin = "0 0", AnchorMax = "0.012 1" } }, cn);
+                ui.Add(new CuiPanel { Image = { Color = svClrDs[i] }, RectTransform = { AnchorMin = "0.88 0.08", AnchorMax = "0.99 0.92" } }, cn, $"{cn}_icon");
+                var svDef = ItemManager.FindItemDefinition(svIcons[i]);
+                if (svDef != null) ui.Add(new CuiElement { Parent = $"{cn}_icon", Components = { new CuiImageComponent { ItemId = svDef.itemid, SkinId = 0 }, new CuiRectTransformComponent { AnchorMin = "0.08 0.08", AnchorMax = "0.92 0.92" } } });
+                ui.Add(new CuiLabel { Text = { Text = svLabels[i], FontSize = 12, Align = TextAnchor.UpperLeft, Color = CText, Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = "0.05 0.42", AnchorMax = "0.85 0.97" } }, cn);
+                ui.Add(new CuiLabel { Text = { Text = svDescs[i], FontSize = 9, Align = TextAnchor.LowerLeft, Color = CDim, Font = "robotocondensed-regular.ttf" }, RectTransform = { AnchorMin = "0.05 0.03", AnchorMax = "0.85 0.46" } }, cn);
+                ui.Add(new CuiButton { Button = { Command = $"mrap.svcmd {svCmds[i]}", Color = "0 0 0 0" }, RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1" }, Text = { Text = "" } }, cn);
             }
         }
 
@@ -845,7 +834,7 @@ export const EXCLUSIVE_PLUGINS: ExclusivePlugin[] = [
   {
     id: "admin-panel",
     name: "Admin Panel",
-    version: "1.3.0",
+    version: "1.3.1",
     description: "In-game admin dashboard with a navigation home screen. Give Items, Players (teleport/heal/kick/ban), and Server quick commands.",
     longDescription: "Opens a compact CUI dashboard in-game (/ap or /adminpanel). Home screen navigation tiles: Give Items (browse 11 categories, give to any player), Players (teleport to/from, heal, strip, kick, ban), Server (save, set day/night, clear weather, supply drop, heal all). Built-in spam protection with per-player cooldowns. Requires the myrconadminpanel.use permission.",
     tags: ["Admin", "Inventory", "QoL"],
