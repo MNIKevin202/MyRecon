@@ -9,9 +9,10 @@ export type ExclusivePlugin = {
   description: string;
   longDescription: string;
   tags: string[];
-  filename: string;     // what the .cs file is named on the server
-  defaultPath: string;  // relative to sftpRootPath (or sftpDefaultPluginPath parent)
-  content: string;      // the actual .cs source
+  filename: string;       // what the .cs file is named on the server
+  defaultPath: string;    // relative to sftpRootPath (or sftpDefaultPluginPath parent)
+  permissions: string[];  // Oxide/Carbon permission nodes this plugin uses
+  content: string;        // the actual .cs source
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -357,6 +358,7 @@ export const EXCLUSIVE_PLUGINS: ExclusivePlugin[] = [
     tags: ["Admin", "Inventory", "QoL"],
     filename: "MyRconAdminPanel.cs",
     defaultPath: "oxide/plugins/MyRconAdminPanel.cs",
+    permissions: ["myrconadminpanel.use"],
     content: ADMIN_PANEL_CS,
   },
 ];

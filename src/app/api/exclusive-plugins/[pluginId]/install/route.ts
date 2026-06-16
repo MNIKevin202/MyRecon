@@ -38,6 +38,11 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   try {
     await writeTextFile(server, installPath, plugin.content);
+    await prisma.appSetting.upsert({
+      where: { key: `plugin_installed:${pluginId}:${body.serverId}` },
+      update: { value: installPath },
+      create: { key: `plugin_installed:${pluginId}:${body.serverId}`, value: installPath },
+    });
     return NextResponse.json({ success: true, path: installPath });
   } catch (error) {
     return NextResponse.json(
