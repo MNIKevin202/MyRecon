@@ -27,6 +27,7 @@ import {
   Users,
 } from "lucide-react";
 import { clsx } from "@/lib/utils";
+import { PluginUpdateBadge } from "@/components/plugin-update-badge";
 
 type NavItem = { href: string; label: string; icon: typeof Gauge };
 type NavSection = { label: string | null; items: NavItem[] };
@@ -115,6 +116,7 @@ export function AppShell({
                   >
                     <Icon className="h-4 w-4" />
                     <span>{item.label}</span>
+                    {item.href === "/exclusive-plugins" && <PluginUpdateBadge />}
                   </Link>
                 );
               })}

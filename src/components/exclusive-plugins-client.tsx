@@ -657,7 +657,7 @@ export function ExclusivePluginsClient({
     });
   }
 
-  const [tab, setTab] = useState<"download" | "installed">("download");
+  const [tab, setTab] = useState<"download" | "installed" | "updates">("download");
 
   // Build merged install map for all plugins
   function mergedVersions(pluginId: string) {
@@ -674,11 +674,14 @@ export function ExclusivePluginsClient({
       ? { ...plugin, version: latestVersions[plugin.id] }
       : plugin;
     const isInstalledAnywhere = Object.keys(mv).length > 0;
-    return { plugin: livePlugin, mv, isInstalledAnywhere };
+    const hasUpdate = isInstalledAnywhere &&
+      Object.values(mv).some((v) => v !== livePlugin.version);
+    return { plugin: livePlugin, mv, isInstalledAnywhere, hasUpdate };
   });
 
   const downloadPlugins  = pluginsWithMeta.filter((p) => !p.isInstalledAnywhere);
   const installedPlugins = pluginsWithMeta.filter((p) => p.isInstalledAnywhere);
+  const updatePlugins    = pluginsWithMeta.filter((p) => p.hasUpdate);
 
   function renderGrid(items: typeof pluginsWithMeta, emptyMsg: string) {
     if (items.length === 0)
@@ -734,25 +737,34 @@ export function ExclusivePluginsClient({
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-white/[0.06]">
-        {(["download", "installed"] as const).map((t) => {
-          const label = t === "download"
-            ? `Download${downloadPlugins.length ? ` (${downloadPlugins.length})` : ""}`
-            : `Installed${installedPlugins.length ? ` (${installedPlugins.length})` : ""}`;
-          return (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={clsx(
-                "px-4 py-2 text-sm font-medium transition border-b-2 -mb-px",
-                tab === t
-                  ? "border-orange-400 text-white"
-                  : "border-transparent text-slate-500 hover:text-slate-300",
-              )}
-            >
-              {label}
-            </button>
-          );
-        })}
+        {([
+          { key: "download",  label: "Download",         count: downloadPlugins.length,  amber: false },
+          { key: "installed", label: "Installed",        count: installedPlugins.length, amber: false },
+          { key: "updates",   label: "Updates Available",count: updatePlugins.length,    amber: true  },
+        ] as const).map(({ key, label, count, amber }) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            className={clsx(
+              "flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition border-b-2 -mb-px",
+              tab === key
+                ? "border-orange-400 text-white"
+                : "border-transparent text-slate-500 hover:text-slate-300",
+            )}
+          >
+            {label}
+            {count > 0 && (
+              <span className={clsx(
+                "rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none",
+                amber
+                  ? "bg-amber-500/20 text-amber-400"
+                  : "bg-white/[0.07] text-slate-400",
+              )}>
+                {count}
+              </span>
+            )}
+          </button>
+        ))}
       </div>
 
       {plugins.length === 0 ? (
@@ -761,6 +773,8 @@ export function ExclusivePluginsClient({
         </div>
       ) : tab === "download" ? (
         renderGrid(downloadPlugins, "All plugins are already installed.")
+      ) : tab === "updates" ? (
+        renderGrid(updatePlugins, "All installed plugins are up to date.")
       ) : (
         renderGrid(installedPlugins, "No plugins installed yet — go to Download to install one.")
       )}
