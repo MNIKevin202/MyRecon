@@ -1,6 +1,6 @@
 {
   "admin-panel": {
-    "version": "1.7.1",
+    "version": "1.8.0",
     "contentUrl": "https://raw.githubusercontent.com/MNIKevin202/MyRecon/main/plugins/MyRconAdminPanel.cs"
   }
 }
