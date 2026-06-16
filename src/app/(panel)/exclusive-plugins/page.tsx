@@ -34,11 +34,27 @@ export default async function ExclusivePluginsPage() {
     }
   }
 
-  // Overlay manifest versions (GitHub is source of truth for latest version)
-  const plugins = EXCLUSIVE_PLUGINS.map((p) => ({
-    ...p,
-    version: manifest?.[p.id]?.version ?? p.version,
-  }));
+  // Build plugin list: manifest is source of truth (lets us add plugins without app updates).
+  // Fall back to local EXCLUSIVE_PLUGINS for any entry the manifest doesn't fully describe.
+  const localById = Object.fromEntries(EXCLUSIVE_PLUGINS.map((p) => [p.id, p]));
+  const plugins = manifest
+    ? Object.entries(manifest).map(([id, m]) => {
+        const local = localById[id];
+        return {
+          id,
+          name: m.name ?? local?.name ?? id,
+          version: m.version,
+          description: m.description ?? local?.description ?? "",
+          longDescription: m.longDescription ?? local?.longDescription ?? "",
+          tags: m.tags ?? local?.tags ?? [],
+          filename: m.filename ?? local?.filename ?? `${id}.cs`,
+          defaultPath: m.defaultPath ?? local?.defaultPath ?? `oxide/plugins/${m.filename ?? id + ".cs"}`,
+          permissions: m.permissions ?? local?.permissions ?? [],
+          previewItems: m.previewItems ?? local?.previewItems ?? [],
+          contentUrl: m.contentUrl,
+        };
+      })
+    : EXCLUSIVE_PLUGINS;
 
   return (
     <ExclusivePluginsClient

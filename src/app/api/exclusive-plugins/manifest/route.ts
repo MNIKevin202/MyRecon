@@ -3,7 +3,18 @@ import { NextResponse } from "next/server";
 const MANIFEST_URL =
   "https://raw.githubusercontent.com/MNIKevin202/MyRecon/main/plugins/manifest.json";
 
-export type PluginManifestEntry = { version: string; contentUrl: string };
+export type PluginManifestEntry = {
+  version: string;
+  contentUrl: string;
+  name?: string;
+  description?: string;
+  longDescription?: string;
+  tags?: string[];
+  filename?: string;
+  defaultPath?: string;
+  permissions?: string[];
+  previewItems?: string[];
+};
 export type PluginManifest = Record<string, PluginManifestEntry>;
 
 export async function GET() {
