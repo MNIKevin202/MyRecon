@@ -23,27 +23,34 @@ export async function POST(request: NextRequest, { params }: Params) {
   // Plugin name without extension for the reload command
   const pluginName = plugin.filename.replace(/\.cs$/i, "");
 
+  const logs: string[] = [];
+
   // Try Oxide first, then Carbon — tolerate "unknown command" from whichever isn't installed
   let raw = "";
   let usedCommand = "";
   const errors: string[] = [];
 
   for (const cmd of [`oxide.reload ${pluginName}`, `c.reload ${pluginName}`]) {
+    logs.push(`> ${cmd}`);
     try {
       raw = await executeServerCommand(server, cmd);
       usedCommand = cmd;
       break;
     } catch (err) {
-      errors.push(err instanceof Error ? err.message : String(err));
+      const msg = err instanceof Error ? err.message : String(err);
+      errors.push(msg);
+      logs.push(`  ERROR: ${msg}`);
     }
   }
 
   if (!usedCommand) {
     return NextResponse.json(
-      { error: `Reload failed on both Oxide and Carbon. Last error: ${errors.at(-1) ?? "unknown"}` },
+      { error: `Reload failed on both Oxide and Carbon. Last error: ${errors.at(-1) ?? "unknown"}`, logs },
       { status: 502 },
     );
   }
 
-  return NextResponse.json({ success: true, command: usedCommand, output: raw });
+  if (raw.trim()) logs.push(raw.trim());
+
+  return NextResponse.json({ success: true, command: usedCommand, output: raw, logs });
 }

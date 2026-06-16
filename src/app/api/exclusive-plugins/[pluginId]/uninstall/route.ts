@@ -39,17 +39,24 @@ export async function POST(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Cannot determine file path — no SFTP root configured." }, { status: 400 });
   }
 
+  const logs: string[] = [];
+  logs.push(`Deleting via SFTP → ${filePath}`);
+
   try {
     await deleteRemotePath(server, filePath);
+    logs.push(`File removed`);
   } catch (err) {
     // If the file is already gone, that's fine — still clean up the DB record
     const msg = err instanceof Error ? err.message : String(err);
     if (!msg.toLowerCase().includes("no such file") && !msg.toLowerCase().includes("not found")) {
-      return NextResponse.json({ error: msg }, { status: 502 });
+      logs.push(`ERROR: ${msg}`);
+      return NextResponse.json({ error: msg, logs }, { status: 502 });
     }
+    logs.push(`File already absent — clearing record`);
   }
 
   await prisma.appSetting.deleteMany({ where: { key } });
+  logs.push(`Plugin record removed from database`);
 
-  return NextResponse.json({ success: true, path: filePath });
+  return NextResponse.json({ success: true, path: filePath, logs });
 }

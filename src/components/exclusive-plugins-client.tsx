@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
   Check,
@@ -11,6 +11,7 @@ import {
   Settings2,
   ShieldCheck,
   ShieldOff,
+  Terminal,
   Trash2,
   UserPlus,
   X,
@@ -247,6 +248,46 @@ function ManageModal({
   );
 }
 
+// ─── Plugin Terminal ──────────────────────────────────────────────────────────
+
+type LogLine = { ts: string; text: string; kind: "info" | "ok" | "err" | "cmd" };
+
+function now() {
+  return new Date().toLocaleTimeString("en-US", { hour12: false });
+}
+
+function PluginTerminal({ lines, onClear }: { lines: LogLine[]; onClear: () => void }) {
+  const bottomRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [lines]);
+  return (
+    <div className="mt-3 overflow-hidden rounded-lg border border-white/[0.07] bg-[#060a0d]">
+      <div className="flex items-center gap-1.5 border-b border-white/[0.06] px-3 py-1.5">
+        <Terminal className="h-3 w-3 shrink-0 text-slate-600" />
+        <span className="flex-1 text-[10px] font-semibold uppercase tracking-wider text-slate-600">Console</span>
+        <button onClick={onClear} className="text-[10px] text-slate-700 hover:text-slate-400 transition">clear</button>
+      </div>
+      <div className="max-h-40 overflow-y-auto px-3 py-2 font-mono text-[11px] leading-relaxed">
+        {lines.length === 0 ? (
+          <span className="text-slate-700">No output yet.</span>
+        ) : (
+          lines.map((l, i) => (
+            <div key={i} className="flex gap-2">
+              <span className="shrink-0 text-slate-700">{l.ts}</span>
+              <span className={clsx(
+                l.kind === "ok"  && "text-emerald-400",
+                l.kind === "err" && "text-red-400",
+                l.kind === "cmd" && "text-amber-300",
+                l.kind === "info" && "text-slate-400",
+              )}>{l.text}</span>
+            </div>
+          ))
+        )}
+        <div ref={bottomRef} />
+      </div>
+    </div>
+  );
+}
+
 // ─── Plugin Card ──────────────────────────────────────────────────────────────
 
 type ActionState = "idle" | "busy" | "ok" | "err";
@@ -276,13 +317,14 @@ function ActionBtn({
 }
 
 function PluginCard({
-  plugin, servers, installedVersions, onInstalled, onUninstalled,
+  plugin, servers, installedVersions, onInstalled, onUninstalled, showConsole,
 }: {
   plugin: PluginMeta;
   servers: ServerOption[];
   installedVersions: Record<string, string>;
   onInstalled: (sid: string, version: string) => void;
   onUninstalled: (sid: string) => void;
+  showConsole: boolean;
 }) {
   const defaultId =
     servers.find((s) => s.isDefault && s.sftpEnabled)?.id ??
@@ -298,6 +340,11 @@ function PluginCard({
   const [reloadMsg, setReloadMsg]     = useState("");
   const [uninstallMsg, setUninstallMsg] = useState("");
   const [showManage, setShowManage]   = useState(false);
+  const [logs, setLogs]               = useState<LogLine[]>([]);
+
+  function addLog(text: string, kind: LogLine["kind"] = "info") {
+    setLogs((prev) => [...prev, { ts: now(), text, kind }]);
+  }
 
   const server           = servers.find((s) => s.id === serverId);
   const canInstall       = !!server?.sftpEnabled;
@@ -309,43 +356,49 @@ function PluginCard({
   async function install() {
     if (!serverId || !canInstall) return;
     setInstall("busy"); setErrMsg("");
+    addLog(`--- Install ${plugin.name} ---`, "info");
     try {
       const res  = await fetch(`/api/exclusive-plugins/${plugin.id}/install`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ serverId }),
       });
-      const data = (await res.json()) as { success?: boolean; version?: string; error?: string };
+      const data = (await res.json()) as { success?: boolean; version?: string; error?: string; logs?: string[] };
+      for (const line of data.logs ?? []) addLog(line, line.startsWith("ERROR") ? "err" : line.startsWith("Writing") || line.startsWith("Fetching") ? "cmd" : "ok");
       if (!res.ok || !data.success) { setErrMsg(data.error ?? "Failed"); setInstall("err"); }
       else { setInstall("ok"); onInstalled(serverId, data.version ?? plugin.version); }
-    } catch { setErrMsg("Network error."); setInstall("err"); }
+    } catch (e) { addLog(`Network error: ${String(e)}`, "err"); setErrMsg("Network error."); setInstall("err"); }
   }
 
   async function uninstall() {
     if (!serverId || !canUninstall) return;
     setUninstall("busy"); setUninstallMsg(""); setConfirm(false);
+    addLog(`--- Uninstall ${plugin.name} ---`, "info");
     try {
       const res  = await fetch(`/api/exclusive-plugins/${plugin.id}/uninstall`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ serverId }),
       });
-      const data = (await res.json()) as { success?: boolean; error?: string };
+      const data = (await res.json()) as { success?: boolean; error?: string; logs?: string[] };
+      for (const line of data.logs ?? []) addLog(line, line.startsWith("ERROR") ? "err" : line.startsWith("Deleting") ? "cmd" : "ok");
       if (!res.ok || !data.success) { setUninstallMsg(data.error ?? "Uninstall failed"); setUninstall("err"); }
       else { setUninstall("idle"); setInstall("idle"); onUninstalled(serverId); }
-    } catch { setUninstallMsg("Network error."); setUninstall("err"); }
+    } catch (e) { addLog(`Network error: ${String(e)}`, "err"); setUninstallMsg("Network error."); setUninstall("err"); }
   }
 
   async function reload() {
     if (!serverId) return;
     setReload("busy"); setReloadMsg("");
+    addLog(`--- Reload ${plugin.name} ---`, "info");
     try {
       const res  = await fetch(`/api/exclusive-plugins/${plugin.id}/reload`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ serverId }),
       });
-      const data = (await res.json()) as { success?: boolean; command?: string; error?: string };
+      const data = (await res.json()) as { success?: boolean; command?: string; error?: string; logs?: string[] };
+      for (const line of data.logs ?? []) addLog(line, line.startsWith("ERROR") ? "err" : line.startsWith(">") ? "cmd" : "ok");
       if (!res.ok || !data.success) { setReloadMsg(data.error ?? "Reload failed"); setReload("err"); }
       else { setReloadMsg(`Reloaded via ${data.command}`); setReload("ok"); setTimeout(() => setReloadMsg(""), 4000); }
-    } catch { setReloadMsg("Network error."); setReload("err"); }
+    } catch (e) { addLog(`Network error: ${String(e)}`, "err"); setReloadMsg("Network error."); setReload("err"); }
   }
 
   return (
@@ -370,7 +423,7 @@ function PluginCard({
         </div>
 
         {/* Body */}
-        <div className="px-4 pt-3 pb-4">
+        <div className={clsx("px-4 pt-3", showConsole && logs.length > 0 ? "pb-2" : "pb-4")}>
           <div className="flex items-start gap-2 min-w-0">
             <h3 className="text-sm font-semibold text-white">{plugin.name}</h3>
             <span className="shrink-0 rounded bg-white/[0.07] px-1.5 py-0.5 font-mono text-[10px] text-slate-500">
@@ -494,6 +547,13 @@ function PluginCard({
             </div>
           </div>
         </div>
+
+        {/* Terminal */}
+        {showConsole && logs.length > 0 && (
+          <div className="px-3 pb-3">
+            <PluginTerminal lines={logs} onClear={() => setLogs([])} />
+          </div>
+        )}
       </div>
 
       {showManage && server && (
@@ -513,6 +573,19 @@ export function ExclusivePluginsClient({
   // pluginId → { serverId → installedVersion }
   installedOn: Record<string, Record<string, string>>;
 }) {
+  // Console toggle — persisted to localStorage
+  const [showConsole, setShowConsole] = useState(true);
+  useEffect(() => {
+    const stored = localStorage.getItem("ep_showConsole");
+    if (stored !== null) setShowConsole(stored !== "false");
+  }, []);
+  function toggleConsole() {
+    setShowConsole((v) => {
+      localStorage.setItem("ep_showConsole", String(!v));
+      return !v;
+    });
+  }
+
   // Local version map updated optimistically after install/uninstall
   const [localVersions, setLocalVersions] = useState<Record<string, Record<string, string>>>({});
   const [localUninstalled, setLocalUninstalled] = useState<Record<string, Set<string>>>({});
@@ -579,7 +652,19 @@ export function ExclusivePluginsClient({
             Install exclusive plugins to your server in one click, then manage permissions from here.
           </p>
         </div>
-        <ChevronRight className="ml-auto h-4 w-4 shrink-0 text-slate-700" />
+        <button
+          onClick={toggleConsole}
+          title={showConsole ? "Hide console output" : "Show console output"}
+          className={clsx(
+            "ml-auto flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition",
+            showConsole
+              ? "border-emerald-500/25 bg-emerald-500/[0.08] text-emerald-400 hover:bg-emerald-500/[0.13]"
+              : "border-white/[0.08] text-slate-500 hover:bg-white/[0.06] hover:text-white",
+          )}
+        >
+          <Terminal className="h-3 w-3" />
+          Console {showConsole ? "On" : "Off"}
+        </button>
       </div>
 
       {plugins.length === 0 ? (
@@ -603,6 +688,7 @@ export function ExclusivePluginsClient({
                 installedVersions={merged}
                 onInstalled={(sid, ver) => handleInstalled(plugin.id, sid, ver)}
                 onUninstalled={(sid) => handleUninstalled(plugin.id, sid)}
+                showConsole={showConsole}
               />
             );
           })}

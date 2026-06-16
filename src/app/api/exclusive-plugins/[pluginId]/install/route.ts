@@ -39,24 +39,28 @@ export async function POST(request: NextRequest, { params }: Params) {
     );
   }
 
+  const logs: string[] = [];
+
   // Fetch the latest .cs source from GitHub
   let content: string;
   let version = plugin.version;
+  logs.push(`Fetching ${plugin.filename} from GitHub...`);
   try {
     const ghRes = await fetch(plugin.contentUrl, { cache: "no-store" });
-    if (!ghRes.ok) throw new Error(`GitHub returned ${ghRes.status} for ${plugin.contentUrl}`);
+    if (!ghRes.ok) throw new Error(`GitHub returned ${ghRes.status}`);
     content = await ghRes.text();
 
     // Extract version from [Info("...", "...", "x.y.z")] attribute
     const match = content.match(/\[Info\([^,]+,\s*[^,]+,\s*"([^"]+)"\s*\)\]/);
     if (match?.[1]) version = match[1];
+    logs.push(`Fetched v${version} (${content.length.toLocaleString()} bytes)`);
   } catch (err) {
-    return NextResponse.json(
-      { error: `Failed to fetch plugin from GitHub: ${err instanceof Error ? err.message : String(err)}` },
-      { status: 502 },
-    );
+    const msg = `Failed to fetch plugin from GitHub: ${err instanceof Error ? err.message : String(err)}`;
+    logs.push(`ERROR: ${msg}`);
+    return NextResponse.json({ error: msg, logs }, { status: 502 });
   }
 
+  logs.push(`Writing via SFTP → ${installPath}`);
   try {
     await writeTextFile(server, installPath, content);
     await prisma.appSetting.upsert({
@@ -64,11 +68,12 @@ export async function POST(request: NextRequest, { params }: Params) {
       update: { value: `${version}|${installPath}` },
       create: { key: `plugin_installed:${pluginId}:${body.serverId}`, value: `${version}|${installPath}` },
     });
-    return NextResponse.json({ success: true, path: installPath, version });
+    logs.push(`File written successfully`);
+    logs.push(`Oxide/Carbon will load ${plugin.filename} automatically — or use Reload`);
+    return NextResponse.json({ success: true, path: installPath, version, logs });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "SFTP write failed" },
-      { status: 502 },
-    );
+    const msg = error instanceof Error ? error.message : "SFTP write failed";
+    logs.push(`ERROR: ${msg}`);
+    return NextResponse.json({ error: msg, logs }, { status: 502 });
   }
 }
