@@ -1,11 +1,13 @@
-import { ModulePlaceholder } from "@/components/module-placeholder";
+import { MonitoringClient } from "@/components/monitoring-client";
+import { prisma } from "@/lib/prisma";
 
-export default function MonitoringPage() {
-  return (
-    <ModulePlaceholder
-      title="Monitoring"
-      description="Metrics storage supports hourly, daily, and weekly server history views."
-      items={["CPU usage", "RAM usage", "Network activity", "FPS and player history"]}
-    />
-  );
+export const dynamic = "force-dynamic";
+
+export default async function MonitoringPage() {
+  const servers = await prisma.serverProfile.findMany({
+    orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+    select: { id: true, name: true, isDefault: true },
+  });
+
+  return <MonitoringClient servers={servers} />;
 }
