@@ -29,7 +29,6 @@ const nav = [
   { href: "/files", label: "Files", icon: FolderTree },
   { href: "/console", label: "Console", icon: TerminalSquare },
   { href: "/chat", label: "Chat", icon: MessageSquare },
-  { href: "/diagnostics", label: "Diagnostics", icon: CircleHelp },
   { href: "/players", label: "Players", icon: Users },
   { href: "/plugins", label: "Plugins", icon: PlugZap },
   { href: "/permissions", label: "Permissions", icon: Shield },
