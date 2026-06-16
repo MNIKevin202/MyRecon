@@ -11,6 +11,7 @@ import {
   FolderTree,
   Gauge,
   LayoutDashboard,
+  LayoutGrid,
   LogOut,
   MessageSquare,
   PlugZap,
@@ -23,20 +24,34 @@ import {
 } from "lucide-react";
 import { clsx } from "@/lib/utils";
 
-const nav = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/servers", label: "Servers", icon: Server },
-  { href: "/files", label: "Files", icon: FolderTree },
-  { href: "/console", label: "Console", icon: TerminalSquare },
-  { href: "/chat", label: "Chat", icon: MessageSquare },
-  { href: "/players", label: "Players", icon: Users },
-  { href: "/plugins", label: "Plugins", icon: PlugZap },
-  { href: "/permissions", label: "Permissions", icon: Shield },
-  { href: "/commands", label: "Commands", icon: ScrollText },
-  { href: "/scheduling", label: "Scheduling", icon: CalendarClock },
-  { href: "/monitoring", label: "Monitoring", icon: Activity },
-  { href: "/notifications", label: "Notifications", icon: Bell },
-  { href: "/settings", label: "Settings", icon: Settings },
+type NavItem = { href: string; label: string; icon: typeof Gauge };
+type NavSection = { label: string | null; items: NavItem[] };
+
+const navSections: NavSection[] = [
+  {
+    label: null,
+    items: [
+      { href: "/dashboard",     label: "Dashboard",    icon: LayoutDashboard },
+      { href: "/servers",       label: "Servers",      icon: Server },
+      { href: "/files",         label: "Files",        icon: FolderTree },
+      { href: "/console",       label: "Console",      icon: TerminalSquare },
+      { href: "/chat",          label: "Chat",         icon: MessageSquare },
+      { href: "/players",       label: "Players",      icon: Users },
+      { href: "/plugins",       label: "Plugins",      icon: PlugZap },
+      { href: "/permissions",   label: "Permissions",  icon: Shield },
+      { href: "/commands",      label: "Commands",     icon: ScrollText },
+      { href: "/scheduling",    label: "Scheduling",   icon: CalendarClock },
+      { href: "/monitoring",    label: "Monitoring",   icon: Activity },
+      { href: "/notifications", label: "Notifications",icon: Bell },
+      { href: "/settings",      label: "Settings",     icon: Settings },
+    ],
+  },
+  {
+    label: "MyRcon",
+    items: [
+      { href: "/admin-panel", label: "Admin Panel", icon: LayoutGrid },
+    ],
+  },
 ];
 
 export function AppShell({
@@ -78,23 +93,32 @@ export function AppShell({
         </div>
 
         <nav className="flex max-w-full gap-1 overflow-x-auto px-3 pb-4 lg:grid lg:overflow-visible">
-          {nav.map((item) => {
-            const active = pathname === item.href;
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={clsx(
-                  "flex min-w-fit items-center gap-3 rounded-md px-3 py-2 text-sm text-slate-400 transition hover:bg-white/[0.06] hover:text-white lg:min-w-0",
-                  active && "bg-orange-500/15 text-orange-100",
-                )}
-              >
-                <Icon className="h-4 w-4" />
-                <span>{item.label}</span>
-              </Link>
-            );
-          })}
+          {navSections.map((section, si) => (
+            <div key={si} className="contents lg:block">
+              {section.label && (
+                <p className="hidden lg:block mt-3 mb-1 px-3 text-[10px] font-semibold uppercase tracking-widest text-slate-600">
+                  {section.label}
+                </p>
+              )}
+              {section.items.map((item) => {
+                const active = pathname === item.href;
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={clsx(
+                      "flex min-w-fit items-center gap-3 rounded-md px-3 py-2 text-sm text-slate-400 transition hover:bg-white/[0.06] hover:text-white lg:min-w-0",
+                      active && "bg-orange-500/15 text-orange-100",
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
         </nav>
 
         <div className="mt-auto hidden border-t border-white/10 p-4 lg:block">
