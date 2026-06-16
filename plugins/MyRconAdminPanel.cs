@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("MyRconAdminPanel", "MyRcon", "1.3.2")]
+    [Info("MyRconAdminPanel", "MyRcon", "1.4.0")]
     [Description("MyRcon exclusive in-game admin dashboard")]
     public class MyRconAdminPanel : RustPlugin
     {
@@ -139,6 +139,13 @@ namespace Oxide.Plugins
             // Players screen
             public int      PlayerPage   = 0;
             public ulong    PlayerSel    = 0;
+
+            // Server screen
+            public float    SvTimeHour   = 12f;
+            public float    SvRain       = 0f;
+            public float    SvFog        = 0f;
+            public float    SvClouds     = 0f;
+            public float    SvWind       = 0f;
 
             // Redraw throttle
             public DateTime LastDrawAt   = DateTime.MinValue;
@@ -351,6 +358,47 @@ namespace Oxide.Plugins
                     SendReply(p, $"<color=#F06A0F>MyRcon</color>: Healed all {BasePlayer.activePlayerList.Count} players.");
                     break;
             }
+            Draw(p, force: true);
+        }
+
+        [ConsoleCommand("mrap.svtime")]
+        void CmdSvTime(ConsoleSystem.Arg a) {
+            var p = a.Player(); if (p == null || !a.HasArgs()) return;
+            var s = Get(p);
+            s.SvTimeHour = ((a.GetFloat(0) % 24f) + 24f) % 24f;
+            ConsoleSystem.Run(ConsoleSystem.Option.Server, "env.time", s.SvTimeHour.ToString("F1"));
+            Draw(p, force: true);
+        }
+
+        [ConsoleCommand("mrap.svwp")]
+        void CmdSvWeatherPreset(ConsoleSystem.Arg a) {
+            var p = a.Player(); if (p == null || !a.HasArgs()) return;
+            var s = Get(p);
+            switch (a.GetString(0)) {
+                case "clear":    ApplyWeather(s, 0f,   0f,    0f,   0f);   break;
+                case "overcast": ApplyWeather(s, 0f,   0.05f, 0.8f, 0.2f); break;
+                case "rain":     ApplyWeather(s, 0.7f, 0.1f,  0.9f, 0.3f); break;
+                case "fog":      ApplyWeather(s, 0f,   0.85f, 0.5f, 0f);   break;
+                case "storm":    ApplyWeather(s, 1f,   0.3f,  1f,   0.8f); break;
+            }
+            Draw(p, force: true);
+        }
+
+        [ConsoleCommand("mrap.svwv")]
+        void CmdSvWeatherValue(ConsoleSystem.Arg a) {
+            var p = a.Player(); if (p == null || !a.HasArgs(2)) return;
+            var s = Get(p);
+            float val    = Mathf.Clamp01(a.GetFloat(1));
+            string key   = a.GetString(0);
+            string convar = null;
+            switch (key) {
+                case "rain":   s.SvRain   = val; convar = "weather.rain";   break;
+                case "fog":    s.SvFog    = val; convar = "weather.fog";    break;
+                case "clouds": s.SvClouds = val; convar = "weather.clouds"; break;
+                case "wind":   s.SvWind   = val; convar = "weather.wind";   break;
+            }
+            if (convar != null)
+                ConsoleSystem.Run(ConsoleSystem.Option.Server, convar, val.ToString("F2"));
             Draw(p, force: true);
         }
 
@@ -752,41 +800,90 @@ namespace Oxide.Plugins
         // ═══════════════════════════════════════════════════════════════════════
 
         void DrawServerScreen(CuiElementContainer ui, S s) {
-            string[] svCmds   = { "save",             "day",              "night",              "weather_clear",          "supply",                    "healall"               };
-            string[] svLabels = { "Save Server",       "Set Day",          "Set Night",          "Clear Weather",          "Supply Drop",               "Heal All"              };
-            string[] svDescs  = { "Write data to disk","Jump to 9:00 AM",  "Jump to 9:00 PM",   "No rain, fog or clouds", "Drop above your position",  "Full health for all"   };
-            string[] svClrs   = { CGreen,              COrange,            CBlue,                CBlue,                    COrange,                     CGreen                  };
-            string[] svClrDs  = { CGreenDim,           COrangeDim,         CBlueDim,             CBlueDim,                 COrangeDim,                  CGreenDim               };
-            string[] svIcons  = { "box.wooden.large",  "torch",            "flashlight.held",    "water.bottle",           "supply.signal",             "syringe.medical"       };
+            // ── Time section ──────────────────────────────────────────────────
+            ui.Add(new CuiPanel { Image = { Color = CPanel }, RectTransform = { AnchorMin = "0.02 0.64", AnchorMax = "0.98 0.97" } }, UiBody, "MRAP_SVT");
+            ui.Add(new CuiLabel { Text = { Text = "TIME OF DAY", FontSize = 9, Align = TextAnchor.MiddleLeft, Color = CMuted, Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = "0.04 0.86", AnchorMax = "0.97 0.98" } }, "MRAP_SVT");
+            ui.Add(new CuiPanel { Image = { Color = CDivider }, RectTransform = { AnchorMin = "0.03 0.83", AnchorMax = "0.97 0.845" } }, "MRAP_SVT");
 
-            ui.Add(new CuiLabel { Text = { Text = "Quick Commands", FontSize = 11, Align = TextAnchor.MiddleLeft, Color = CMuted, Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = "0.03 0.91", AnchorMax = "0.97 0.97" } }, UiBody);
+            // Big clock + step buttons
+            ui.Add(new CuiLabel { Text = { Text = FormatHour(s.SvTimeHour), FontSize = 26, Align = TextAnchor.MiddleLeft, Color = CText, Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = "0.04 0.44", AnchorMax = "0.60 0.82" } }, "MRAP_SVT");
+            float tMinus = ((s.SvTimeHour - 1f) + 24f) % 24f;
+            float tPlus  = (s.SvTimeHour + 1f) % 24f;
+            ui.Add(new CuiButton { Button = { Command = string.Format("mrap.svtime {0:F1}", tMinus), Color = CCell }, RectTransform = { AnchorMin = "0.62 0.50", AnchorMax = "0.78 0.80" }, Text = { Text = "- 1h", FontSize = 10, Align = TextAnchor.MiddleCenter, Color = CMuted } }, "MRAP_SVT");
+            ui.Add(new CuiButton { Button = { Command = string.Format("mrap.svtime {0:F1}", tPlus),  Color = CCell }, RectTransform = { AnchorMin = "0.80 0.50", AnchorMax = "0.97 0.80" }, Text = { Text = "+ 1h", FontSize = 10, Align = TextAnchor.MiddleCenter, Color = COrange } }, "MRAP_SVT");
 
-            const int svCols = 2;
-            const float padX = 0.03f;
-            const float gapX = 0.025f; const float gapY = 0.025f;
-            float cardW = (1f - 2 * padX - (svCols - 1) * gapX) / svCols;
-            float cardH = 0.12f;
-            float startY = 0.895f;
+            // Time preset buttons
+            float[] tHours  = { 6f,     9f,        12f,    18f,    22f    };
+            string[] tNames = { "Dawn", "Morning", "Noon", "Dusk", "Night" };
+            for (int i = 0; i < 5; i++) {
+                float tx0 = 0.02f + i * 0.191f;
+                bool sel = Math.Abs(s.SvTimeHour - tHours[i]) < 0.1f;
+                ui.Add(new CuiButton { Button = { Command = string.Format("mrap.svtime {0:F1}", tHours[i]), Color = sel ? COrangeDim : CCell }, RectTransform = { AnchorMin = string.Format("{0:F3} 0.07", tx0), AnchorMax = string.Format("{0:F3} 0.41", tx0 + 0.183f) }, Text = { Text = tNames[i], FontSize = 10, Align = TextAnchor.MiddleCenter, Color = sel ? COrange : CMuted, Font = "robotocondensed-bold.ttf" } }, "MRAP_SVT");
+            }
 
-            for (int i = 0; i < svCmds.Length; i++) {
-                int col = i % svCols; int row = i / svCols;
-                float x0 = padX + col * (cardW + gapX);
-                float y1 = startY - row * (cardH + gapY);
-                float y0 = y1 - cardH;
-                string cn = $"MRAP_SV{i}";
+            // ── Weather section ───────────────────────────────────────────────
+            ui.Add(new CuiPanel { Image = { Color = CPanel }, RectTransform = { AnchorMin = "0.02 0.22", AnchorMax = "0.98 0.62" } }, UiBody, "MRAP_SVW");
+            ui.Add(new CuiLabel { Text = { Text = "WEATHER", FontSize = 9, Align = TextAnchor.MiddleLeft, Color = CMuted, Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = "0.04 0.91", AnchorMax = "0.97 1.00" } }, "MRAP_SVW");
+            ui.Add(new CuiPanel { Image = { Color = CDivider }, RectTransform = { AnchorMin = "0.03 0.88", AnchorMax = "0.97 0.895" } }, "MRAP_SVW");
 
-                ui.Add(new CuiPanel { Image = { Color = CCell }, RectTransform = { AnchorMin = $"{x0:F3} {y0:F3}", AnchorMax = $"{x0+cardW:F3} {y1:F3}" } }, UiBody, cn);
-                ui.Add(new CuiPanel { Image = { Color = svClrs[i] },  RectTransform = { AnchorMin = "0 0", AnchorMax = "0.012 1" } }, cn);
-                ui.Add(new CuiPanel { Image = { Color = svClrDs[i] }, RectTransform = { AnchorMin = "0.88 0.08", AnchorMax = "0.99 0.92" } }, cn, $"{cn}_icon");
-                var svDef = ItemManager.FindItemDefinition(svIcons[i]);
-                if (svDef != null) ui.Add(new CuiElement { Parent = $"{cn}_icon", Components = { new CuiImageComponent { ItemId = svDef.itemid, SkinId = 0 }, new CuiRectTransformComponent { AnchorMin = "0.08 0.08", AnchorMax = "0.92 0.92" } } });
-                ui.Add(new CuiLabel { Text = { Text = svLabels[i], FontSize = 12, Align = TextAnchor.UpperLeft, Color = CText, Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = "0.05 0.42", AnchorMax = "0.85 0.97" } }, cn);
-                ui.Add(new CuiLabel { Text = { Text = svDescs[i], FontSize = 9, Align = TextAnchor.LowerLeft, Color = CDim, Font = "robotocondensed-regular.ttf" }, RectTransform = { AnchorMin = "0.05 0.03", AnchorMax = "0.85 0.46" } }, cn);
-                ui.Add(new CuiButton { Button = { Command = $"mrap.svcmd {svCmds[i]}", Color = "0 0 0 0" }, RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1" }, Text = { Text = "" } }, cn);
+            // Weather preset buttons
+            string[] wpCmds  = { "clear",  "overcast", "rain",  "fog",  "storm"  };
+            string[] wpNames = { "Clear",  "Overcast", "Rain",  "Fog",  "Storm"  };
+            for (int i = 0; i < 5; i++) {
+                float wx0 = 0.02f + i * 0.191f;
+                ui.Add(new CuiButton { Button = { Command = string.Format("mrap.svwp {0}", wpCmds[i]), Color = CCell }, RectTransform = { AnchorMin = string.Format("{0:F3} 0.75", wx0), AnchorMax = string.Format("{0:F3} 0.87", wx0 + 0.183f) }, Text = { Text = wpNames[i], FontSize = 10, Align = TextAnchor.MiddleCenter, Color = CMuted, Font = "robotocondensed-bold.ttf" } }, "MRAP_SVW");
+            }
+
+            // Individual weather bars (bottom to top)
+            AddWeatherBar(ui, "MRAP_SVW", "rain",   "Rain",   s.SvRain,   "0.18 0.45 0.82 0.65", 0.57f, 0.72f);
+            AddWeatherBar(ui, "MRAP_SVW", "fog",    "Fog",    s.SvFog,    "0.65 0.67 0.70 0.65", 0.40f, 0.55f);
+            AddWeatherBar(ui, "MRAP_SVW", "clouds", "Clouds", s.SvClouds, "0.80 0.82 0.85 0.50", 0.23f, 0.38f);
+            AddWeatherBar(ui, "MRAP_SVW", "wind",   "Wind",   s.SvWind,   "0.12 0.60 0.60 0.65", 0.06f, 0.21f);
+
+            // ── Quick actions section ─────────────────────────────────────────
+            ui.Add(new CuiPanel { Image = { Color = CPanel }, RectTransform = { AnchorMin = "0.02 0.02", AnchorMax = "0.98 0.20" } }, UiBody, "MRAP_SVQ");
+            ui.Add(new CuiLabel { Text = { Text = "QUICK ACTIONS", FontSize = 9, Align = TextAnchor.MiddleLeft, Color = CMuted, Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = "0.04 0.76", AnchorMax = "0.97 0.98" } }, "MRAP_SVQ");
+            ui.Add(new CuiPanel { Image = { Color = CDivider }, RectTransform = { AnchorMin = "0.03 0.73", AnchorMax = "0.97 0.745" } }, "MRAP_SVQ");
+
+            string[] qCmds   = { "save",         "supply",        "healall"  };
+            string[] qLabels = { "Save Server",  "Supply Drop",   "Heal All" };
+            string[] qClrs   = { CGreen,          COrange,         CGreen     };
+            for (int i = 0; i < 3; i++) {
+                float qx0 = 0.02f + i * 0.330f;
+                ui.Add(new CuiButton { Button = { Command = string.Format("mrap.svcmd {0}", qCmds[i]), Color = CCell }, RectTransform = { AnchorMin = string.Format("{0:F3} 0.08", qx0), AnchorMax = string.Format("{0:F3} 0.68", qx0 + 0.313f) }, Text = { Text = qLabels[i], FontSize = 11, Align = TextAnchor.MiddleCenter, Color = qClrs[i], Font = "robotocondensed-bold.ttf" } }, "MRAP_SVQ");
             }
         }
 
         // ── Helpers ───────────────────────────────────────────────────────────
+
+        static string FormatHour(float h) {
+            int hours = (int)h % 24;
+            int mins  = (int)((h - (int)h) * 60f);
+            string ampm = hours < 12 ? "AM" : "PM";
+            int disp = hours % 12; if (disp == 0) disp = 12;
+            return string.Format("{0}:{1:D2} {2}", disp, mins, ampm);
+        }
+
+        void ApplyWeather(S s, float rain, float fog, float clouds, float wind) {
+            s.SvRain = rain; s.SvFog = fog; s.SvClouds = clouds; s.SvWind = wind;
+            ConsoleSystem.Run(ConsoleSystem.Option.Server, "weather.rain",   rain.ToString("F2"));
+            ConsoleSystem.Run(ConsoleSystem.Option.Server, "weather.fog",    fog.ToString("F2"));
+            ConsoleSystem.Run(ConsoleSystem.Option.Server, "weather.clouds", clouds.ToString("F2"));
+            ConsoleSystem.Run(ConsoleSystem.Option.Server, "weather.wind",   wind.ToString("F2"));
+        }
+
+        void AddWeatherBar(CuiElementContainer ui, string par, string key, string label, float value, string fillClr, float y0, float y1) {
+            float pad = (y1 - y0) * 0.12f;
+            ui.Add(new CuiLabel { Text = { Text = label, FontSize = 10, Align = TextAnchor.MiddleLeft, Color = CMuted, Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = string.Format("0.03 {0:F3}", y0), AnchorMax = string.Format("0.17 {0:F3}", y1) } }, par);
+            string barId = par + "_b_" + key;
+            ui.Add(new CuiPanel { Image = { Color = "0.05 0.07 0.10 1" }, RectTransform = { AnchorMin = string.Format("0.18 {0:F3}", y0 + pad), AnchorMax = string.Format("0.70 {0:F3}", y1 - pad) } }, par, barId);
+            if (value > 0.005f) ui.Add(new CuiPanel { Image = { Color = fillClr }, RectTransform = { AnchorMin = "0 0", AnchorMax = string.Format("{0:F3} 1", value) } }, barId);
+            ui.Add(new CuiLabel { Text = { Text = string.Format("{0}%", (int)(value * 100)), FontSize = 9, Align = TextAnchor.MiddleCenter, Color = CMuted }, RectTransform = { AnchorMin = string.Format("0.71 {0:F3}", y0), AnchorMax = string.Format("0.80 {0:F3}", y1) } }, par);
+            float minus = Mathf.Max(0f, value - 0.1f);
+            float plus  = Mathf.Min(1f, value + 0.1f);
+            ui.Add(new CuiButton { Button = { Command = string.Format("mrap.svwv {0} {1:F2}", key, minus), Color = "0.08 0.10 0.13 1" }, RectTransform = { AnchorMin = string.Format("0.81 {0:F3}", y0 + pad), AnchorMax = string.Format("0.89 {0:F3}", y1 - pad) }, Text = { Text = "-", FontSize = 13, Align = TextAnchor.MiddleCenter, Color = CText } }, par);
+            ui.Add(new CuiButton { Button = { Command = string.Format("mrap.svwv {0} {1:F2}", key, plus),  Color = "0.08 0.10 0.13 1" }, RectTransform = { AnchorMin = string.Format("0.91 {0:F3}", y0 + pad), AnchorMax = string.Format("0.99 {0:F3}", y1 - pad) }, Text = { Text = "+", FontSize = 13, Align = TextAnchor.MiddleCenter, Color = COrange } }, par);
+        }
 
         static List<string> ItemsFor(string cat) {
             if (cat == "All") return Categories.Values.SelectMany(x => x).ToList();
