@@ -657,6 +657,51 @@ export function ExclusivePluginsClient({
     });
   }
 
+  const [tab, setTab] = useState<"download" | "installed">("download");
+
+  // Build merged install map for all plugins
+  function mergedVersions(pluginId: string) {
+    const base    = installedOn[pluginId] ?? {};
+    const removed = localUninstalled[pluginId] ?? new Set<string>();
+    const merged  = { ...base, ...(localVersions[pluginId] ?? {}) };
+    for (const sid of removed) delete merged[sid];
+    return merged;
+  }
+
+  const pluginsWithMeta = plugins.map((plugin) => {
+    const mv      = mergedVersions(plugin.id);
+    const livePlugin = latestVersions[plugin.id]
+      ? { ...plugin, version: latestVersions[plugin.id] }
+      : plugin;
+    const isInstalledAnywhere = Object.keys(mv).length > 0;
+    return { plugin: livePlugin, mv, isInstalledAnywhere };
+  });
+
+  const downloadPlugins  = pluginsWithMeta.filter((p) => !p.isInstalledAnywhere);
+  const installedPlugins = pluginsWithMeta.filter((p) => p.isInstalledAnywhere);
+
+  function renderGrid(items: typeof pluginsWithMeta, emptyMsg: string) {
+    if (items.length === 0)
+      return (
+        <div className="rounded-xl border border-white/[0.06] bg-[#0d1117] py-12 text-center text-sm text-slate-600">
+          {emptyMsg}
+        </div>
+      );
+    return (
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {items.map(({ plugin, mv }) => (
+          <PluginCard
+            key={plugin.id} plugin={plugin} servers={servers}
+            installedVersions={mv}
+            onInstalled={(sid, ver) => handleInstalled(plugin.id, sid, ver)}
+            onUninstalled={(sid) => handleUninstalled(plugin.id, sid)}
+            addLog={addLog}
+          />
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div className="grid gap-5">
       {/* Header */}
@@ -687,32 +732,37 @@ export function ExclusivePluginsClient({
         </button>
       </div>
 
+      {/* Tabs */}
+      <div className="flex gap-1 border-b border-white/[0.06]">
+        {(["download", "installed"] as const).map((t) => {
+          const label = t === "download"
+            ? `Download${downloadPlugins.length ? ` (${downloadPlugins.length})` : ""}`
+            : `Installed${installedPlugins.length ? ` (${installedPlugins.length})` : ""}`;
+          return (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={clsx(
+                "px-4 py-2 text-sm font-medium transition border-b-2 -mb-px",
+                tab === t
+                  ? "border-orange-400 text-white"
+                  : "border-transparent text-slate-500 hover:text-slate-300",
+              )}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
       {plugins.length === 0 ? (
         <div className="rounded-xl border border-white/[0.06] bg-[#0d1117] py-12 text-center text-sm text-slate-600">
           No exclusive plugins available yet.
         </div>
+      ) : tab === "download" ? (
+        renderGrid(downloadPlugins, "All plugins are already installed.")
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {plugins.map((plugin) => {
-            const base = installedOn[plugin.id] ?? {};
-            const removed = localUninstalled[plugin.id] ?? new Set<string>();
-            const merged  = { ...base, ...(localVersions[plugin.id] ?? {}) };
-            for (const sid of removed) delete merged[sid];
-            // Overlay the polled manifest version so the card reacts without a page reload
-            const livePlugin = latestVersions[plugin.id]
-              ? { ...plugin, version: latestVersions[plugin.id] }
-              : plugin;
-            return (
-              <PluginCard
-                key={plugin.id} plugin={livePlugin} servers={servers}
-                installedVersions={merged}
-                onInstalled={(sid, ver) => handleInstalled(plugin.id, sid, ver)}
-                onUninstalled={(sid) => handleUninstalled(plugin.id, sid)}
-                addLog={addLog}
-              />
-            );
-          })}
-        </div>
+        renderGrid(installedPlugins, "No plugins installed yet — go to Download to install one.")
       )}
 
       {/* Shared full-width console */}
