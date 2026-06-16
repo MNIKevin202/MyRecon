@@ -1,6 +1,6 @@
 {
   "name": "myrcon",
-  "version": "0.1.17",
+  "version": "0.1.18",
   "description": "Self-hosted Rust server administration panel",
   "author": "MyRcon",
   "repository": {
@@ -68,8 +68,8 @@
       }
     ],
     "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
+      "oneClick": true,
+      "allowElevation": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "differentialPackage": false,

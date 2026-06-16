@@ -111,11 +111,11 @@ export function UpdateNotification() {
           <p className="mt-1 text-xs text-slate-400">
             {state.isMac
               ? "Download and install the new DMG from GitHub."
-              : "Restart the app to finish installing."}
+              : "The app will restart and update automatically."}
           </p>
           <div className="mt-3 flex justify-end">
             <Button onClick={() => window.myrcon?.quitAndInstall()}>
-              {state.isMac ? "Open GitHub Releases" : "Restart & Install"}
+              {state.isMac ? "Open GitHub Releases" : "Restart & Update"}
             </Button>
           </div>
         </>

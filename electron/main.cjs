@@ -60,7 +60,7 @@ function configureAutoUpdates() {
       // For unsigned builds, open the releases page so the user can download manually.
       shell.openExternal("https://github.com/MNIKevin202/MyRecon/releases/latest");
     } else {
-      autoUpdater.quitAndInstall(false, true);
+      autoUpdater.quitAndInstall(true, true);
     }
   });
 
