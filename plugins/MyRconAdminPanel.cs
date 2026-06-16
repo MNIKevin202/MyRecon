@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("MyRconAdminPanel", "MyRcon", "1.6.9")]
+    [Info("MyRconAdminPanel", "MyRcon", "1.7.0")]
     [Description("MyRcon exclusive in-game admin dashboard")]
     public class MyRconAdminPanel : RustPlugin
     {
@@ -50,7 +50,7 @@ namespace Oxide.Plugins
         private const string CCooldown   = "0.55 0.18 0.08 1";
 
         // ── Plugin version (shown in header for update confirmation) ──────────
-        private const string PluginVersion = "1.6.9";
+        private const string PluginVersion = "1.7.0";
 
         // ── Rate limiting ─────────────────────────────────────────────────────
         private const double GiveCooldownSecs = 2.0;
@@ -175,9 +175,9 @@ namespace Oxide.Plugins
 
         // ── Oxide hooks ───────────────────────────────────────────────────────
         void Init() => permission.RegisterPermission(PermUse, this);
-        void Unload() { foreach (var p in BasePlayer.activePlayerList) { CuiHelper.DestroyUi(p, UiShadow); CuiHelper.DestroyUi(p, "MRAP_Rim"); CuiHelper.DestroyUi(p, UiMain); } _s.Clear(); }
-        void OnPlayerDisconnected(BasePlayer p, string r) { CuiHelper.DestroyUi(p, UiShadow); CuiHelper.DestroyUi(p, "MRAP_Rim"); CuiHelper.DestroyUi(p, UiMain); _s.Remove(p.userID); }
-        void OnPlayerSleepEnded(BasePlayer p) { CuiHelper.DestroyUi(p, UiShadow); CuiHelper.DestroyUi(p, "MRAP_Rim"); CuiHelper.DestroyUi(p, UiMain); }
+        void Unload() { foreach (var p in BasePlayer.activePlayerList) { CuiHelper.DestroyUi(p, UiShadow); CuiHelper.DestroyUi(p, UiMain); } _s.Clear(); }
+        void OnPlayerDisconnected(BasePlayer p, string r) { CuiHelper.DestroyUi(p, UiShadow); CuiHelper.DestroyUi(p, UiMain); _s.Remove(p.userID); }
+        void OnPlayerSleepEnded(BasePlayer p) { CuiHelper.DestroyUi(p, UiShadow); CuiHelper.DestroyUi(p, UiMain); }
 
         // ── Chat commands ─────────────────────────────────────────────────────
         [ChatCommand("ap")]
@@ -419,37 +419,23 @@ namespace Oxide.Plugins
             if (!force && !AllowDraw(s)) return;
 
             CuiHelper.DestroyUi(player, UiShadow);
-            CuiHelper.DestroyUi(player, "MRAP_Rim");
             CuiHelper.DestroyUi(player, UiMain);
             var ui = new CuiElementContainer();
 
-            // Drop shadow — offset down-right, rendered before main so it sits behind
+            // Outer border frame — 1px orange accent line on all sides
             ui.Add(new CuiPanel {
-                Image         = { Color = "0 0 0 0.65", Sprite = "assets/content/ui/ui.background.rounded.png", Material = "assets/icons/iconmaterial.mat" },
-                RectTransform = { AnchorMin = "0.154 0.075", AnchorMax = "0.854 0.925" },
+                Image         = { Color = "0.94 0.42 0.06 0.35" },
+                RectTransform = { AnchorMin = "0.1495 0.0795", AnchorMax = "0.8505 0.9305" },
                 CursorEnabled = false
             }, "Overlay", UiShadow);
 
-            // Secondary outer glow — slightly larger than main, very subtle lighter rim
-            ui.Add(new CuiPanel {
-                Image         = { Color = "0.18 0.22 0.28 0.9", Sprite = "assets/content/ui/ui.background.rounded.png", Material = "assets/icons/iconmaterial.mat" },
-                RectTransform = { AnchorMin = "0.1495 0.0795", AnchorMax = "0.8505 0.9305" },
-                CursorEnabled = false
-            }, "Overlay", "MRAP_Rim");
-
             // Main panel
             ui.Add(new CuiPanel {
-                Image           = { Color = CBg, Sprite = "assets/content/ui/ui.background.rounded.png", Material = "assets/icons/iconmaterial.mat" },
+                Image           = { Color = CBg },
                 RectTransform   = { AnchorMin = "0.15 0.08", AnchorMax = "0.85 0.93" },
                 CursorEnabled   = true,
                 KeyboardEnabled = false
             }, "Overlay", UiMain);
-
-            // Top-edge highlight — thin bright strip inside the top edge for "raised" depth
-            ui.Add(new CuiPanel {
-                Image         = { Color = "1 1 1 0.055" },
-                RectTransform = { AnchorMin = "0.02 0.988", AnchorMax = "0.98 0.999" }
-            }, UiMain);
 
             DrawHeader(ui, s);
 
@@ -472,16 +458,18 @@ namespace Oxide.Plugins
         // ── Header (all screens) ──────────────────────────────────────────────
 
         void DrawHeader(CuiElementContainer ui, S s) {
-            // Deep header bar
+            // Header bar
             ui.Add(new CuiPanel {
                 Image         = { Color = CHeader },
                 RectTransform = { AnchorMin = "0 0.945", AnchorMax = "1 1" }
             }, UiMain, "MRAP_H");
 
-            // Left orange brand stripe (thin vertical line)
+            // Subtle top highlight — makes header feel raised
+            ui.Add(new CuiPanel { Image = { Color = "1 1 1 0.04" }, RectTransform = { AnchorMin = "0 0.82", AnchorMax = "1 1" } }, "MRAP_H");
+            // Left orange brand stripe
             ui.Add(new CuiPanel { Image = { Color = COrange }, RectTransform = { AnchorMin = "0 0", AnchorMax = "0.005 1" } }, "MRAP_H");
-            // Bottom separator line
-            ui.Add(new CuiPanel { Image = { Color = CDivider }, RectTransform = { AnchorMin = "0.005 0", AnchorMax = "1 0.045" } }, "MRAP_H");
+            // Orange accent along bottom separator — more vivid than plain divider
+            ui.Add(new CuiPanel { Image = { Color = "0.94 0.42 0.06 0.5" }, RectTransform = { AnchorMin = "0.005 0", AnchorMax = "1 0.045" } }, "MRAP_H");
 
             float xCursor = 0.013f;
 
