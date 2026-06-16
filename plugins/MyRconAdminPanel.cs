@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("MyRconAdminPanel", "MyRcon", "1.5.0")]
+    [Info("MyRconAdminPanel", "MyRcon", "1.6.0")]
     [Description("MyRcon exclusive in-game admin dashboard")]
     public class MyRconAdminPanel : RustPlugin
     {
@@ -23,25 +23,30 @@ namespace Oxide.Plugins
         private const string ScrServer  = "server";
 
         // ── Palette ───────────────────────────────────────────────────────────
-        private const string CBg        = "0.04 0.05 0.07 0.98";
-        private const string CPanel     = "0.065 0.08 0.10 1";
-        private const string CHeader    = "0.04 0.055 0.075 1";
-        private const string CCell      = "0.085 0.105 0.13 1";
-        private const string CCellSel   = "0.16 0.08 0.02 1";
-        private const string CDivider   = "1 1 1 0.05";
-        private const string COrange    = "0.94 0.42 0.06 1";
-        private const string COrangeDim = "0.94 0.42 0.06 0.15";
-        private const string CBlue      = "0.18 0.45 0.82 1";
-        private const string CBlueDim   = "0.18 0.45 0.82 0.15";
-        private const string CGreen     = "0.22 0.65 0.32 1";
-        private const string CGreenDim  = "0.22 0.65 0.32 0.15";
-        private const string CRed       = "0.75 0.18 0.12 1";
-        private const string CRedDim    = "0.75 0.18 0.12 0.18";
-        private const string CText      = "0.90 0.92 0.95 1";
-        private const string CMuted     = "0.48 0.53 0.60 1";
-        private const string CDim       = "0.28 0.32 0.38 1";
-        private const string CBtnOff    = "0.09 0.11 0.15 1";
-        private const string CCooldown  = "0.55 0.18 0.08 1";
+        private const string CBg         = "0.04 0.05 0.07 0.98";
+        private const string CHeader     = "0.03 0.04 0.06 1";
+        private const string CPanel      = "0.07 0.085 0.11 1";
+        private const string CCell       = "0.095 0.115 0.148 1";
+        private const string CCellSel    = "0.18 0.09 0.02 1";
+        private const string CDivider    = "1 1 1 0.055";
+        // Accent colours
+        private const string COrange     = "0.94 0.42 0.06 1";
+        private const string COrangeDim  = "0.94 0.42 0.06 0.14";
+        private const string COrangeDeep = "0.22 0.10 0.02 1";   // dark bg for Give Items tile
+        private const string CBlue       = "0.18 0.45 0.82 1";
+        private const string CBlueDim    = "0.18 0.45 0.82 0.14";
+        private const string CBlueDeep   = "0.04 0.09 0.20 1";   // dark bg for Players tile
+        private const string CGreen      = "0.22 0.65 0.32 1";
+        private const string CGreenDim   = "0.22 0.65 0.32 0.14";
+        private const string CGreenDeep  = "0.04 0.13 0.07 1";   // dark bg for Server tile
+        private const string CRed        = "0.75 0.18 0.12 1";
+        private const string CRedDim     = "0.75 0.18 0.12 0.16";
+        // Text
+        private const string CText       = "0.94 0.95 0.97 1";   // near-white for max contrast
+        private const string CMuted      = "0.58 0.63 0.70 1";   // visible secondary text
+        private const string CDim        = "0.36 0.41 0.48 1";   // tertiary / labels
+        private const string CBtnOff     = "0.09 0.11 0.15 1";
+        private const string CCooldown   = "0.55 0.18 0.08 1";
 
         // ── Rate limiting ─────────────────────────────────────────────────────
         private const double GiveCooldownSecs = 2.0;
@@ -520,85 +525,88 @@ namespace Oxide.Plugins
         };
 
         void DrawHome(CuiElementContainer ui, S s) {
-            // Subheader: subtitle left, player count right
-            int onlineCount = BasePlayer.activePlayerList.Count;
-            ui.Add(new CuiLabel {
-                Text          = { Text = "Admin Panel", FontSize = 11, Align = TextAnchor.MiddleLeft, Color = CMuted, Font = "robotocondensed-bold.ttf" },
-                RectTransform = { AnchorMin = "0.035 0.895", AnchorMax = "0.6 0.96" }
-            }, UiBody);
-            ui.Add(new CuiLabel {
-                Text          = { Text = $"{onlineCount} online", FontSize = 10, Align = TextAnchor.MiddleRight, Color = onlineCount > 0 ? "0.3 0.72 0.4 1" : CDim, Font = "robotocondensed-bold.ttf" },
-                RectTransform = { AnchorMin = "0.6 0.895", AnchorMax = "0.97 0.96" }
-            }, UiBody);
+            int online = BasePlayer.activePlayerList.Count;
 
-            // 2×2 tile grid
-            const float padX = 0.025f;
-            const float gapX = 0.018f;
-            const float gapY = 0.018f;
+            // Subheader row
+            ui.Add(new CuiLabel {
+                Text          = { Text = "Select a module", FontSize = 11, Align = TextAnchor.MiddleLeft, Color = CDim, Font = "robotocondensed-regular.ttf" },
+                RectTransform = { AnchorMin = "0.03 0.908", AnchorMax = "0.65 0.965" }
+            }, UiBody);
+            ui.Add(new CuiLabel {
+                Text          = { Text = $"{online} online", FontSize = 11, Align = TextAnchor.MiddleRight, Color = online > 0 ? "0.30 0.74 0.40 1" : CDim, Font = "robotocondensed-bold.ttf" },
+                RectTransform = { AnchorMin = "0.65 0.908", AnchorMax = "0.97 0.965" }
+            }, UiBody);
+            ui.Add(new CuiPanel { Image = { Color = CDivider }, RectTransform = { AnchorMin = "0.025 0.902", AnchorMax = "0.975 0.908" } }, UiBody);
+
+            // Deep icon-bg colours — one per tile slot
+            string[] deepBg = { COrangeDeep, CBlueDeep, CGreenDeep, "0.055 0.065 0.082 1" };
+
+            const float padX = 0.022f;
+            const float gapX = 0.016f;
+            const float gapY = 0.016f;
             float tileW = (1f - 2f*padX - gapX) / 2f;
-            float tileH = (0.89f - 0.05f - gapY) / 2f;
+            float tileH = (0.90f - 0.04f - gapY) / 2f;
 
             for (int i = 0; i < Tiles.Length; i++) {
                 var t       = Tiles[i];
                 int col     = i % 2;
                 int row     = i / 2;
                 float x0    = padX + col * (tileW + gapX);
-                float y1    = 0.89f - row * (tileH + gapY);
+                float y1    = 0.90f - row * (tileH + gapY);
                 float y0    = y1 - tileH;
                 string tn   = $"MRAP_T{i}";
                 bool future = string.IsNullOrEmpty(t.Screen);
 
-                // Tile background
+                // Card shell
                 ui.Add(new CuiPanel {
-                    Image         = { Color = future ? "0.055 0.065 0.082 1" : CCell },
+                    Image         = { Color = CPanel },
                     RectTransform = { AnchorMin = $"{x0:F3} {y0:F3}", AnchorMax = $"{x0+tileW:F3} {y1:F3}" }
                 }, UiBody, tn);
 
-                // Left accent bar (replaces old ugly top bar)
+                // Top half: coloured deep bg (gives each card a distinct identity)
+                string topColor = future ? "0.055 0.065 0.082 1" : deepBg[i];
                 ui.Add(new CuiPanel {
-                    Image         = { Color = future ? "0.12 0.14 0.18 1" : t.Accent },
-                    RectTransform = { AnchorMin = "0 0", AnchorMax = "0.008 1" }
-                }, tn);
+                    Image         = { Color = topColor },
+                    RectTransform = { AnchorMin = "0 0.48", AnchorMax = "1 1" }
+                }, tn, $"{tn}_top");
 
-                // 2 item icons stacked on the right side
+                // Centered item icon in the top section
                 if (!future && t.Items.Length > 0) {
-                    for (int j = 0; j < Math.Min(2, t.Items.Length); j++) {
-                        var def = ItemManager.FindItemDefinition(t.Items[j]);
-                        if (def == null) continue;
-                        float iy1 = 0.91f - j * 0.475f;
-                        float iy0 = iy1 - 0.40f;
-                        string imgN = $"{tn}_i{j}";
-                        ui.Add(new CuiPanel {
-                            Image         = { Color = t.AccentDim },
-                            RectTransform = { AnchorMin = $"0.775 {iy0:F3}", AnchorMax = $"0.975 {iy1:F3}" }
-                        }, tn, imgN);
+                    var def = ItemManager.FindItemDefinition(t.Items[0]);
+                    if (def != null) {
                         ui.Add(new CuiElement {
-                            Parent     = imgN,
+                            Parent     = $"{tn}_top",
                             Components = {
                                 new CuiImageComponent { ItemId = def.itemid, SkinId = 0 },
-                                new CuiRectTransformComponent { AnchorMin = "0.1 0.1", AnchorMax = "0.9 0.9" }
+                                new CuiRectTransformComponent { AnchorMin = "0.37 0.10", AnchorMax = "0.63 0.90" }
                             }
                         });
                     }
                 }
 
-                // Title
+                // Thin accent separator between top and bottom
+                ui.Add(new CuiPanel {
+                    Image         = { Color = future ? CDivider : t.Accent },
+                    RectTransform = { AnchorMin = "0 0.476", AnchorMax = "1 0.485" }
+                }, tn);
+
+                // Title — large, bold, white
                 ui.Add(new CuiLabel {
-                    Text          = { Text = t.Title, FontSize = 14, Align = TextAnchor.MiddleLeft, Color = future ? CDim : CText, Font = "robotocondensed-bold.ttf" },
-                    RectTransform = { AnchorMin = "0.05 0.50", AnchorMax = "0.74 0.88" }
+                    Text          = { Text = t.Title, FontSize = 16, Align = TextAnchor.UpperLeft, Color = future ? CDim : CText, Font = "robotocondensed-bold.ttf" },
+                    RectTransform = { AnchorMin = "0.06 0.27", AnchorMax = "0.97 0.47" }
                 }, tn);
 
                 // Description
                 ui.Add(new CuiLabel {
                     Text          = { Text = t.Desc, FontSize = 10, Align = TextAnchor.UpperLeft, Color = CDim, Font = "robotocondensed-regular.ttf" },
-                    RectTransform = { AnchorMin = "0.05 0.17", AnchorMax = "0.74 0.50" }
+                    RectTransform = { AnchorMin = "0.06 0.11", AnchorMax = "0.97 0.27" }
                 }, tn);
 
-                // Footer row
+                // Footer CTA or "SOON" badge
                 if (!future) {
                     ui.Add(new CuiLabel {
-                        Text          = { Text = "Open  >", FontSize = 9, Align = TextAnchor.MiddleLeft, Color = t.Accent, Font = "robotocondensed-bold.ttf" },
-                        RectTransform = { AnchorMin = "0.05 0.04", AnchorMax = "0.45 0.18" }
+                        Text          = { Text = "Open  >", FontSize = 10, Align = TextAnchor.MiddleLeft, Color = t.Accent, Font = "robotocondensed-bold.ttf" },
+                        RectTransform = { AnchorMin = "0.06 0.02", AnchorMax = "0.50 0.12" }
                     }, tn);
                     ui.Add(new CuiButton {
                         Button        = { Command = $"mrap.nav {t.Screen}", Color = "0 0 0 0" },
@@ -607,11 +615,11 @@ namespace Oxide.Plugins
                     }, tn);
                 } else {
                     ui.Add(new CuiPanel {
-                        Image         = { Color = "0.09 0.11 0.14 1" },
-                        RectTransform = { AnchorMin = "0.05 0.06", AnchorMax = "0.24 0.20" }
+                        Image         = { Color = CCell },
+                        RectTransform = { AnchorMin = "0.06 0.03", AnchorMax = "0.32 0.13" }
                     }, tn, $"{tn}_sp");
                     ui.Add(new CuiLabel {
-                        Text          = { Text = "SOON", FontSize = 8, Align = TextAnchor.MiddleCenter, Color = CDim, Font = "robotocondensed-bold.ttf" },
+                        Text          = { Text = "COMING SOON", FontSize = 7, Align = TextAnchor.MiddleCenter, Color = CDim, Font = "robotocondensed-bold.ttf" },
                         RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1" }
                     }, $"{tn}_sp");
                 }
@@ -761,98 +769,96 @@ namespace Oxide.Plugins
             s.PlayerPage = Mathf.Clamp(s.PlayerPage, 0, pages - 1);
             var pagePlayers = allPlayers.Skip(s.PlayerPage * PlayersPerPage).Take(PlayersPerPage).ToList();
 
-            // Left: player list (58%)
+            // ── Left: player list ─────────────────────────────────────────────
             string listN = "MRAP_PL";
             ui.Add(new CuiPanel { Image = { Color = "0 0 0 0" }, RectTransform = { AnchorMin = "0 0.05", AnchorMax = "0.57 0.97" } }, UiBody, listN);
 
-            ui.Add(new CuiLabel { Text = { Text = $"Online Players  ·  {allPlayers.Count}", FontSize = 10, Align = TextAnchor.MiddleLeft, Color = CMuted, Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = "0.02 0.94", AnchorMax = "0.98 1" } }, listN);
+            // List header
+            ui.Add(new CuiLabel { Text = { Text = $"Online  ·  {allPlayers.Count}", FontSize = 11, Align = TextAnchor.MiddleLeft, Color = CMuted, Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = "0.02 0.94", AnchorMax = "0.80 1" } }, listN);
+            ui.Add(new CuiLabel { Text = { Text = "PING", FontSize = 9, Align = TextAnchor.MiddleRight, Color = CDim, Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = "0.80 0.94", AnchorMax = "0.98 1" } }, listN);
 
-            const float rH = 0.082f; const float rG = 0.008f;
+            const float rH = 0.086f; const float rG = 0.007f;
             for (int i = 0; i < pagePlayers.Count; i++) {
-                var pl = pagePlayers[i];
-                bool isSelf = pl.userID == invoker.userID;
-                bool sel    = s.PlayerSel == pl.userID;
-                float y1 = 0.93f - i * (rH + rG); float y0 = y1 - rH;
+                var pl    = pagePlayers[i];
+                bool self = pl.userID == invoker.userID;
+                bool sel  = s.PlayerSel == pl.userID;
+                float y1  = 0.932f - i * (rH + rG);
+                float y0  = y1 - rH;
                 string rn = $"MRAP_PLR{i}";
 
-                ui.Add(new CuiPanel { Image = { Color = sel ? CBlueDim : CCell }, RectTransform = { AnchorMin = $"0 {y0:F3}", AnchorMax = $"1 {y1:F3}" } }, listN, rn);
+                // Row bg
+                ui.Add(new CuiPanel { Image = { Color = sel ? "0.06 0.10 0.18 1" : CCell }, RectTransform = { AnchorMin = $"0 {y0:F3}", AnchorMax = $"1 {y1:F3}" } }, listN, rn);
                 // Left accent
-                ui.Add(new CuiPanel { Image = { Color = sel ? CBlue : CDivider }, RectTransform = { AnchorMin = "0 0", AnchorMax = "0.012 1" } }, rn);
+                ui.Add(new CuiPanel { Image = { Color = sel ? CBlue : CDivider }, RectTransform = { AnchorMin = "0 0", AnchorMax = "0.010 1" } }, rn);
                 // Online dot
-                ui.Add(new CuiPanel { Image = { Color = "0.22 0.7 0.3 1" }, RectTransform = { AnchorMin = "0.025 0.38", AnchorMax = "0.045 0.62" } }, rn);
+                ui.Add(new CuiPanel { Image = { Color = "0.22 0.72 0.32 1" }, RectTransform = { AnchorMin = "0.022 0.36", AnchorMax = "0.042 0.64" } }, rn);
                 // Name
-                ui.Add(new CuiLabel { Text = { Text = pl.displayName + (isSelf ? "  (you)" : ""), FontSize = 11, Align = TextAnchor.MiddleLeft, Color = sel ? "0.75 0.88 1 1" : CText, Font = "robotocondensed-regular.ttf" }, RectTransform = { AnchorMin = "0.055 0.36", AnchorMax = "0.75 1" } }, rn);
+                ui.Add(new CuiLabel { Text = { Text = pl.displayName + (self ? "  (you)" : ""), FontSize = 12, Align = TextAnchor.MiddleLeft, Color = sel ? "0.78 0.90 1 1" : CText, Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = "0.055 0.34", AnchorMax = "0.78 1" } }, rn);
                 // Steam ID
-                ui.Add(new CuiLabel { Text = { Text = pl.UserIDString, FontSize = 8, Align = TextAnchor.MiddleLeft, Color = CDim, Font = "robotocondensed-regular.ttf" }, RectTransform = { AnchorMin = "0.055 0", AnchorMax = "0.75 0.4" } }, rn);
+                ui.Add(new CuiLabel { Text = { Text = pl.UserIDString, FontSize = 8, Align = TextAnchor.MiddleLeft, Color = CDim, Font = "robotocondensed-regular.ttf" }, RectTransform = { AnchorMin = "0.055 0", AnchorMax = "0.78 0.38" } }, rn);
                 // Ping
-                ui.Add(new CuiLabel { Text = { Text = Network.Net.sv.GetAveragePing(pl.Connection) + "ms", FontSize = 9, Align = TextAnchor.MiddleRight, Color = CDim, Font = "robotocondensed-regular.ttf" }, RectTransform = { AnchorMin = "0.75 0", AnchorMax = "0.97 1" } }, rn);
+                int ping = Network.Net.sv.GetAveragePing(pl.Connection);
+                string pingColor = ping < 80 ? "0.3 0.72 0.4 1" : ping < 150 ? "0.9 0.75 0.2 1" : "0.85 0.3 0.25 1";
+                ui.Add(new CuiLabel { Text = { Text = ping + "ms", FontSize = 10, Align = TextAnchor.MiddleRight, Color = pingColor, Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = "0.78 0", AnchorMax = "0.97 1" } }, rn);
 
-                if (!isSelf) ui.Add(new CuiButton { Button = { Command = $"mrap.psel {pl.userID}", Color = "0 0 0 0" }, RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1" }, Text = { Text = "" } }, rn);
+                if (!self) ui.Add(new CuiButton { Button = { Command = $"mrap.psel {pl.userID}", Color = "0 0 0 0" }, RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1" }, Text = { Text = "" } }, rn);
             }
 
             if (allPlayers.Count == 0)
-                ui.Add(new CuiLabel { Text = { Text = "No other players online", FontSize = 11, Align = TextAnchor.MiddleCenter, Color = CDim }, RectTransform = { AnchorMin = "0 0.4", AnchorMax = "1 0.6" } }, listN);
+                ui.Add(new CuiLabel { Text = { Text = "No players online", FontSize = 12, Align = TextAnchor.MiddleCenter, Color = CDim }, RectTransform = { AnchorMin = "0 0.35", AnchorMax = "1 0.65" } }, listN);
 
             // Pagination
-            ui.Add(new CuiLabel { Text = { Text = $"Page {s.PlayerPage + 1} / {pages}", FontSize = 9, Align = TextAnchor.MiddleLeft, Color = CDim }, RectTransform = { AnchorMin = "0.02 0", AnchorMax = "0.5 0.05" } }, listN);
-            if (s.PlayerPage > 0)       ui.Add(new CuiButton { Button = { Command = $"mrap.ppage {s.PlayerPage - 1}", Color = CCell }, RectTransform = { AnchorMin = "0.5 0", AnchorMax = "0.73 0.048" }, Text = { Text = "<", FontSize = 10, Align = TextAnchor.MiddleCenter, Color = CMuted } }, listN);
-            if (s.PlayerPage < pages-1) ui.Add(new CuiButton { Button = { Command = $"mrap.ppage {s.PlayerPage + 1}", Color = CCell }, RectTransform = { AnchorMin = "0.75 0", AnchorMax = "0.98 0.048" }, Text = { Text = ">", FontSize = 10, Align = TextAnchor.MiddleCenter, Color = CMuted } }, listN);
+            ui.Add(new CuiLabel { Text = { Text = $"Page {s.PlayerPage + 1} / {pages}", FontSize = 9, Align = TextAnchor.MiddleLeft, Color = CDim }, RectTransform = { AnchorMin = "0.02 0.004", AnchorMax = "0.5 0.048" } }, listN);
+            if (s.PlayerPage > 0)        ui.Add(new CuiButton { Button = { Command = $"mrap.ppage {s.PlayerPage - 1}", Color = CCell }, RectTransform = { AnchorMin = "0.50 0.004", AnchorMax = "0.73 0.048" }, Text = { Text = "<", FontSize = 11, Align = TextAnchor.MiddleCenter, Color = CMuted } }, listN);
+            if (s.PlayerPage < pages-1)  ui.Add(new CuiButton { Button = { Command = $"mrap.ppage {s.PlayerPage + 1}", Color = CCell }, RectTransform = { AnchorMin = "0.75 0.004", AnchorMax = "0.98 0.048" }, Text = { Text = ">", FontSize = 11, Align = TextAnchor.MiddleCenter, Color = CMuted } }, listN);
 
-            // Right: action panel (40%)
+            // ── Right: action panel ───────────────────────────────────────────
             string actN = "MRAP_PA";
             ui.Add(new CuiPanel { Image = { Color = CPanel }, RectTransform = { AnchorMin = "0.59 0", AnchorMax = "1 0.97" } }, UiBody, actN);
-            ui.Add(new CuiPanel { Image = { Color = CDivider }, RectTransform = { AnchorMin = "0 0", AnchorMax = "0.005 1" } }, actN);
+            ui.Add(new CuiPanel { Image = { Color = CDivider }, RectTransform = { AnchorMin = "0 0", AnchorMax = "0.004 1" } }, actN);
 
             var sel2 = s.PlayerSel != 0 ? BasePlayer.FindByID(s.PlayerSel) : null;
 
             if (sel2 == null) {
-                // Empty state card
-                ui.Add(new CuiPanel { Image = { Color = "0.055 0.065 0.082 1" }, RectTransform = { AnchorMin = "0.06 0.38", AnchorMax = "0.94 0.62" } }, actN, "MRAP_PAEmpty");
-                ui.Add(new CuiLabel { Text = { Text = "Select a player", FontSize = 12, Align = TextAnchor.UpperCenter, Color = CDim, Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = "0 0.52", AnchorMax = "1 1" } }, "MRAP_PAEmpty");
-                ui.Add(new CuiLabel { Text = { Text = "to see actions", FontSize = 10, Align = TextAnchor.LowerCenter, Color = "0.2 0.23 0.28 1", Font = "robotocondensed-regular.ttf" }, RectTransform = { AnchorMin = "0 0", AnchorMax = "1 0.48" } }, "MRAP_PAEmpty");
+                // Empty state
+                ui.Add(new CuiPanel { Image = { Color = CCell }, RectTransform = { AnchorMin = "0.08 0.40", AnchorMax = "0.92 0.60" } }, actN, "MRAP_PAE");
+                ui.Add(new CuiLabel { Text = { Text = "Select a player", FontSize = 13, Align = TextAnchor.UpperCenter, Color = CMuted, Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = "0 0.50", AnchorMax = "1 1" } }, "MRAP_PAE");
+                ui.Add(new CuiLabel { Text = { Text = "from the list", FontSize = 10, Align = TextAnchor.LowerCenter, Color = CDim, Font = "robotocondensed-regular.ttf" }, RectTransform = { AnchorMin = "0 0", AnchorMax = "1 0.50" } }, "MRAP_PAE");
             } else {
-                // ── Selected player card ──────────────────────────────────────
-                ui.Add(new CuiPanel { Image = { Color = "0.05 0.065 0.085 1" }, RectTransform = { AnchorMin = "0.03 0.89", AnchorMax = "0.97 1.00" } }, actN, "MRAP_PAH");
-                // Left blue accent bar
-                ui.Add(new CuiPanel { Image = { Color = CBlue }, RectTransform = { AnchorMin = "0 0", AnchorMax = "0.018 1" } }, "MRAP_PAH");
-                // Green online dot
-                ui.Add(new CuiPanel { Image = { Color = "0.22 0.72 0.32 1" }, RectTransform = { AnchorMin = "0.06 0.40", AnchorMax = "0.115 0.60" } }, "MRAP_PAH");
-                ui.Add(new CuiLabel { Text = { Text = sel2.displayName, FontSize = 12, Align = TextAnchor.UpperLeft, Color = CText, Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = "0.14 0.44", AnchorMax = "0.98 0.95" } }, "MRAP_PAH");
-                ui.Add(new CuiLabel { Text = { Text = sel2.UserIDString, FontSize = 8, Align = TextAnchor.LowerLeft, Color = CDim, Font = "robotocondensed-regular.ttf" }, RectTransform = { AnchorMin = "0.14 0.05", AnchorMax = "0.98 0.48" } }, "MRAP_PAH");
+                // ── Player card ───────────────────────────────────────────────
+                ui.Add(new CuiPanel { Image = { Color = "0.05 0.08 0.12 1" }, RectTransform = { AnchorMin = "0.03 0.89", AnchorMax = "0.97 1.00" } }, actN, "MRAP_PAH");
+                ui.Add(new CuiPanel { Image = { Color = CBlue }, RectTransform = { AnchorMin = "0 0", AnchorMax = "0.016 1" } }, "MRAP_PAH");
+                ui.Add(new CuiPanel { Image = { Color = "0.22 0.72 0.32 1" }, RectTransform = { AnchorMin = "0.055 0.38", AnchorMax = "0.10 0.62" } }, "MRAP_PAH");
+                ui.Add(new CuiLabel { Text = { Text = sel2.displayName, FontSize = 13, Align = TextAnchor.UpperLeft, Color = CText, Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = "0.13 0.44", AnchorMax = "0.98 0.96" } }, "MRAP_PAH");
+                ui.Add(new CuiLabel { Text = { Text = sel2.UserIDString, FontSize = 8, Align = TextAnchor.LowerLeft, Color = CDim, Font = "robotocondensed-regular.ttf" }, RectTransform = { AnchorMin = "0.13 0.04", AnchorMax = "0.98 0.46" } }, "MRAP_PAH");
 
-                // ── Player stat strip ─────────────────────────────────────────
-                int selHp   = sel2 != null ? (int)(sel2.health / sel2.MaxHealth() * 100f) : 0;
-                int selPing = sel2 != null ? Network.Net.sv.GetAveragePing(sel2.Connection) : 0;
-                ui.Add(new CuiPanel { Image = { Color = "0.05 0.06 0.08 1" }, RectTransform = { AnchorMin = "0.03 0.80", AnchorMax = "0.97 0.875" } }, actN, "MRAP_PSTAT");
-                ui.Add(new CuiLabel { Text = { Text = $"HP  {selHp}%", FontSize = 9, Align = TextAnchor.MiddleLeft, Color = CMuted, Font = "robotocondensed-regular.ttf" }, RectTransform = { AnchorMin = "0.10 0", AnchorMax = "0.5 1" } }, "MRAP_PSTAT");
-                ui.Add(new CuiLabel { Text = { Text = $"Ping  {selPing}ms", FontSize = 9, Align = TextAnchor.MiddleRight, Color = CMuted, Font = "robotocondensed-regular.ttf" }, RectTransform = { AnchorMin = "0.5 0", AnchorMax = "0.90 1" } }, "MRAP_PSTAT");
+                // Stat strip: HP + Ping
+                int hp   = (int)(sel2.health / sel2.MaxHealth() * 100f);
+                int pms  = Network.Net.sv.GetAveragePing(sel2.Connection);
+                ui.Add(new CuiPanel { Image = { Color = CCell }, RectTransform = { AnchorMin = "0.03 0.808", AnchorMax = "0.97 0.878" } }, actN, "MRAP_PST");
+                ui.Add(new CuiLabel { Text = { Text = $"HP   {hp}%", FontSize = 10, Align = TextAnchor.MiddleLeft, Color = CMuted, Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = "0.08 0", AnchorMax = "0.5 1" } }, "MRAP_PST");
+                ui.Add(new CuiLabel { Text = { Text = $"Ping   {pms}ms", FontSize = 10, Align = TextAnchor.MiddleRight, Color = CMuted, Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = "0.5 0", AnchorMax = "0.92 1" } }, "MRAP_PST");
 
-                // ── 2×3 action button grid ────────────────────────────────────
-                string[] aCmds   = { "teleport_to",  "teleport_here", "heal",   "strip",  "kick",  "ban"  };
-                string[] aLabels = { "Teleport To",  "Bring Here",    "Heal",   "Strip",  "Kick",  "Ban"  };
-                string[] aClrs   = { CBlue,           CBlue,           CGreen,   COrange,  CRed,    CRed   };
-                string[] aClrDs  = { CBlueDim,        CBlueDim,        CGreenDim,COrangeDim,CRedDim,CRedDim };
+                // 2×3 action grid
+                string[] aCmds   = { "teleport_to",  "teleport_here", "heal",   "strip",   "kick",  "ban"  };
+                string[] aLabels = { "Teleport To",  "Bring Here",    "Heal",   "Strip",   "Kick",  "Ban"  };
+                string[] aAccent = { CBlue,           CBlue,           CGreen,   COrange,   CRed,    CRed   };
 
-                const float btnW  = 0.435f;
-                const float btnH  = 0.145f;
-                const float btnGX = 0.02f;
-                const float btnGY = 0.015f;
-                float startY = 0.773f;
+                const float bW = 0.435f; const float bH = 0.142f;
+                const float bGX = 0.02f; const float bGY = 0.013f;
+                float sY = 0.782f;
 
                 for (int i = 0; i < aCmds.Length; i++) {
-                    int bcol  = i % 2;
-                    int brow  = i / 2;
-                    float ax0 = 0.04f + bcol * (btnW + btnGX);
-                    float ay1 = startY - brow * (btnH + btnGY);
-                    float ay0 = ay1 - btnH;
+                    int bc  = i % 2, br = i / 2;
+                    float ax0 = 0.04f + bc * (bW + bGX);
+                    float ay1 = sY - br * (bH + bGY);
+                    float ay0 = ay1 - bH;
                     string an = $"MRAP_ACT{i}";
 
-                    ui.Add(new CuiPanel { Image = { Color = CCell }, RectTransform = { AnchorMin = $"{ax0:F3} {ay0:F3}", AnchorMax = $"{ax0+btnW:F3} {ay1:F3}" } }, actN, an);
-                    // Top accent line
-                    ui.Add(new CuiPanel { Image = { Color = aClrs[i] }, RectTransform = { AnchorMin = "0 0.88", AnchorMax = "1 1" } }, an);
-                    // Coloured dim background fill
-                    ui.Add(new CuiPanel { Image = { Color = aClrDs[i] }, RectTransform = { AnchorMin = "0 0", AnchorMax = "1 0.88" } }, an);
-                    ui.Add(new CuiLabel { Text = { Text = aLabels[i], FontSize = 11, Align = TextAnchor.MiddleCenter, Color = CText, Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = "0.04 0", AnchorMax = "0.96 0.87" } }, an);
+                    // Card with left accent bar
+                    ui.Add(new CuiPanel { Image = { Color = CCell }, RectTransform = { AnchorMin = $"{ax0:F3} {ay0:F3}", AnchorMax = $"{ax0+bW:F3} {ay1:F3}" } }, actN, an);
+                    ui.Add(new CuiPanel { Image = { Color = aAccent[i] }, RectTransform = { AnchorMin = "0 0", AnchorMax = "0.025 1" } }, an);
+                    ui.Add(new CuiLabel { Text = { Text = aLabels[i], FontSize = 11, Align = TextAnchor.MiddleLeft, Color = CText, Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = "0.10 0", AnchorMax = "0.97 1" } }, an);
                     ui.Add(new CuiButton { Button = { Command = $"mrap.paction {aCmds[i]}", Color = "0 0 0 0" }, RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1" }, Text = { Text = "" } }, an);
                 }
             }
@@ -865,7 +871,7 @@ namespace Oxide.Plugins
         void DrawServerScreen(CuiElementContainer ui, S s) {
             // ── Time section ──────────────────────────────────────────────────
             ui.Add(new CuiPanel { Image = { Color = CPanel }, RectTransform = { AnchorMin = "0.02 0.64", AnchorMax = "0.98 0.97" } }, UiBody, "MRAP_SVT");
-            ui.Add(new CuiLabel { Text = { Text = "TIME OF DAY", FontSize = 9, Align = TextAnchor.MiddleLeft, Color = CMuted, Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = "0.04 0.86", AnchorMax = "0.97 0.98" } }, "MRAP_SVT");
+            ui.Add(new CuiLabel { Text = { Text = "TIME OF DAY", FontSize = 12, Align = TextAnchor.MiddleLeft, Color = CMuted, Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = "0.04 0.86", AnchorMax = "0.97 0.98" } }, "MRAP_SVT");
             ui.Add(new CuiPanel { Image = { Color = CDivider }, RectTransform = { AnchorMin = "0.03 0.83", AnchorMax = "0.97 0.845" } }, "MRAP_SVT");
 
             // Big clock + step buttons
@@ -886,7 +892,7 @@ namespace Oxide.Plugins
 
             // ── Weather section ───────────────────────────────────────────────
             ui.Add(new CuiPanel { Image = { Color = CPanel }, RectTransform = { AnchorMin = "0.02 0.22", AnchorMax = "0.98 0.62" } }, UiBody, "MRAP_SVW");
-            ui.Add(new CuiLabel { Text = { Text = "WEATHER", FontSize = 9, Align = TextAnchor.MiddleLeft, Color = CMuted, Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = "0.04 0.91", AnchorMax = "0.97 1.00" } }, "MRAP_SVW");
+            ui.Add(new CuiLabel { Text = { Text = "WEATHER", FontSize = 12, Align = TextAnchor.MiddleLeft, Color = CMuted, Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = "0.04 0.91", AnchorMax = "0.97 1.00" } }, "MRAP_SVW");
             ui.Add(new CuiPanel { Image = { Color = CDivider }, RectTransform = { AnchorMin = "0.03 0.88", AnchorMax = "0.97 0.895" } }, "MRAP_SVW");
 
             // Weather preset buttons
@@ -905,7 +911,7 @@ namespace Oxide.Plugins
 
             // ── Quick actions section ─────────────────────────────────────────
             ui.Add(new CuiPanel { Image = { Color = CPanel }, RectTransform = { AnchorMin = "0.02 0.02", AnchorMax = "0.98 0.20" } }, UiBody, "MRAP_SVQ");
-            ui.Add(new CuiLabel { Text = { Text = "QUICK ACTIONS", FontSize = 9, Align = TextAnchor.MiddleLeft, Color = CMuted, Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = "0.04 0.76", AnchorMax = "0.97 0.98" } }, "MRAP_SVQ");
+            ui.Add(new CuiLabel { Text = { Text = "QUICK ACTIONS", FontSize = 12, Align = TextAnchor.MiddleLeft, Color = CMuted, Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = "0.04 0.76", AnchorMax = "0.97 0.98" } }, "MRAP_SVQ");
             ui.Add(new CuiPanel { Image = { Color = CDivider }, RectTransform = { AnchorMin = "0.03 0.73", AnchorMax = "0.97 0.745" } }, "MRAP_SVQ");
 
             string[] qCmds   = { "save",         "supply",        "healall"  };
@@ -937,7 +943,7 @@ namespace Oxide.Plugins
 
         void AddWeatherBar(CuiElementContainer ui, string par, string key, string label, float value, string fillClr, float y0, float y1) {
             float pad = (y1 - y0) * 0.12f;
-            ui.Add(new CuiLabel { Text = { Text = label, FontSize = 10, Align = TextAnchor.MiddleLeft, Color = CMuted, Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = string.Format("0.03 {0:F3}", y0), AnchorMax = string.Format("0.17 {0:F3}", y1) } }, par);
+            ui.Add(new CuiLabel { Text = { Text = label, FontSize = 11, Align = TextAnchor.MiddleLeft, Color = CMuted, Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = string.Format("0.03 {0:F3}", y0), AnchorMax = string.Format("0.17 {0:F3}", y1) } }, par);
             string barId = par + "_b_" + key;
             ui.Add(new CuiPanel { Image = { Color = "0.05 0.07 0.10 1" }, RectTransform = { AnchorMin = string.Format("0.18 {0:F3}", y0 + pad), AnchorMax = string.Format("0.70 {0:F3}", y1 - pad) } }, par, barId);
             if (value > 0.005f) ui.Add(new CuiPanel { Image = { Color = fillClr }, RectTransform = { AnchorMin = "0 0", AnchorMax = string.Format("{0:F3} 1", value) } }, barId);
