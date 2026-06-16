@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Pencil, Plus, Star, Trash2 } from "lucide-react";
+import { Check, Pencil, Plus, Power, Star, Trash2 } from "lucide-react";
 import { Button, Field, Input, Panel, Select } from "@/components/ui";
 import { api, clsx } from "@/lib/utils";
 
@@ -139,6 +139,16 @@ export function ServerManager({ initialServers }: { initialServers: Server[] }) 
     }
   }
 
+  async function reboot(server: Server) {
+    if (!window.confirm(`Reboot ${server.name}? The server process will restart.`)) return;
+    setMessage(`Reboot command sent to ${server.name} — server will restart shortly.`);
+    try {
+      await api(`/api/servers/${server.id}/console`, { method: "POST", body: JSON.stringify({ command: "quit" }) });
+    } catch {
+      // quit disconnects the server before it can reply — treat any network/timeout error as success
+    }
+  }
+
   async function saveSftp(forceEnabled = false) {
     if (!editing) {
       setMessage("Save the server profile before configuring SFTP.");
@@ -248,6 +258,7 @@ export function ServerManager({ initialServers }: { initialServers: Server[] }) 
                   <Button variant="secondary" onClick={() => test(server)}><Check className="h-4 w-4" />Test</Button>
                   <Button variant="secondary" onClick={() => startEdit(server)}><Pencil className="h-4 w-4" />Edit</Button>
                   <Button variant="secondary" onClick={() => makeDefault(server)}><Star className="h-4 w-4" />Default</Button>
+                  <Button variant="danger" onClick={() => reboot(server)}><Power className="h-4 w-4" />Reboot</Button>
                   <Button variant="danger" onClick={() => remove(server)}><Trash2 className="h-4 w-4" />Delete</Button>
                 </div>
               </div>

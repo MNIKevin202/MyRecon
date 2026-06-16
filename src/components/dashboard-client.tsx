@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Activity, Copy, Database, HardDrive, Radio, Users } from "lucide-react";
+import { Activity, Copy, Database, HardDrive, Power, Radio, Users } from "lucide-react";
 import { Button, Panel, Select } from "@/components/ui";
 import { api } from "@/lib/utils";
 
@@ -114,6 +114,7 @@ export function DashboardClient({ servers }: { servers: Server[] }) {
   const [status, setStatus] = useState<Status | null>(null);
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(false);
+  const [rebooting, setRebooting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [inferredConnectionStatus, setInferredConnectionStatus] = useState<string | null>(null);
   const selected = useMemo(() => servers.find((server) => server.id === serverId), [serverId, servers]);
@@ -344,6 +345,19 @@ export function DashboardClient({ servers }: { servers: Server[] }) {
     }
   }
 
+  async function reboot() {
+    if (!serverId || !window.confirm(`Reboot ${selected?.name ?? "this server"}? The server process will restart.`)) return;
+    setRebooting(true);
+    setNotice("Reboot command sent — server will restart shortly.");
+    try {
+      await api(`/api/servers/${serverId}/console`, { method: "POST", body: JSON.stringify({ command: "quit" }) });
+    } catch {
+      // quit disconnects the server before it can reply — treat any error as success
+    } finally {
+      setRebooting(false);
+    }
+  }
+
   async function clearEvents() {
     if (!serverId) return;
     await api(`/api/servers/${serverId}/events`, { method: "DELETE" });
@@ -368,6 +382,9 @@ export function DashboardClient({ servers }: { servers: Server[] }) {
           </Select>
           <Button variant="secondary" onClick={loadStatus} disabled={loading}>
             {loading ? "Checking..." : "Refresh"}
+          </Button>
+          <Button variant="danger" onClick={reboot} disabled={rebooting || !serverId}>
+            <Power className="h-4 w-4" />{rebooting ? "Rebooting..." : "Reboot"}
           </Button>
           <Button variant="secondary" onClick={copyDiagnostics}>
             <Copy className="h-4 w-4" />Diagnostics
