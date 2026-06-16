@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("MyRconReclaim", "MyRcon", "1.0.0")]
+    [Info("MyRconReclaim", "MyRcon", "1.0.1")]
     [Description("PvE server cleanup and abandoned asset management for MyRCON")]
     public class MyRconReclaim : RustPlugin
     {
@@ -840,8 +840,8 @@ namespace Oxide.Plugins
         bool IsTrackedDeployable(BaseEntity e)
         {
             if (e == null) return false;
-            if (e is BuildingBlock || e is BuildingPrivilege || e is BasePlayer || e is BaseNpc) return false;
-            if (e.OwnerID == 0) return false;
+            if (e is BuildingBlock || e is BuildingPrivilege || e is BasePlayer) return false;
+            if (e.OwnerID == 0) return false;  // filters NPCs, world entities, etc.
             if (e is BaseVehicle) return false;
             string name = e.ShortPrefabName;
             foreach (string part in DeployableParts) if (name.Contains(part)) return true;

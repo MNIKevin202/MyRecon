@@ -4,7 +4,7 @@
     "contentUrl": "https://raw.githubusercontent.com/MNIKevin202/MyRecon/main/plugins/MyRconAdminPanel.cs"
   },
   "reclaim": {
-    "version": "1.0.0",
+    "version": "1.0.1",
     "contentUrl": "https://raw.githubusercontent.com/MNIKevin202/MyRecon/main/plugins/MyRconReclaim.cs"
   }
 }
