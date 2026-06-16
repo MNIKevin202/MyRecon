@@ -48,6 +48,9 @@ namespace Oxide.Plugins
         private const string CBtnOff     = "0.09 0.11 0.15 1";
         private const string CCooldown   = "0.55 0.18 0.08 1";
 
+        // ── Plugin version (shown in header for update confirmation) ──────────
+        private const string PluginVersion = "1.6.0";
+
         // ── Rate limiting ─────────────────────────────────────────────────────
         private const double GiveCooldownSecs = 2.0;
         private const double DrawThrottleMs   = 200.0;
@@ -502,6 +505,12 @@ namespace Oxide.Plugins
                     RectTransform = { AnchorMin = $"{xCursor:F3} 0.1", AnchorMax = "0.88 0.9" }
                 }, "MRAP_H");
             }
+
+            // Version label
+            ui.Add(new CuiLabel {
+                Text          = { Text = "v" + PluginVersion, FontSize = 8, Align = TextAnchor.MiddleRight, Color = CDim, Font = "robotocondensed-regular.ttf" },
+                RectTransform = { AnchorMin = "0.840 0.1", AnchorMax = "0.930 0.9" }
+            }, "MRAP_H");
 
             // Close button
             ui.Add(new CuiButton {
