@@ -127,22 +127,22 @@ function logRconSelection(server: ServerProfile, command: string, details: RconC
   );
 }
 
-function webClientFor(server: ServerProfile, onDebug?: (message: string) => void, passwordOverride?: string) {
+function webClientFor(server: ServerProfile, onDebug?: (message: string) => void, passwordOverride?: string, timeoutMs?: number) {
   return new WebRconClient({
     host: server.host,
     port: server.rconPort,
     password: getRconPassword(server, passwordOverride),
-    timeoutMs: 6000,
+    timeoutMs: timeoutMs ?? 6000,
     onDebug,
   });
 }
 
-function sourceClientFor(server: ServerProfile, passwordOverride?: string) {
+function sourceClientFor(server: ServerProfile, passwordOverride?: string, timeoutMs?: number) {
   return new SourceRconClient({
     host: server.host,
     port: server.rconPort,
     password: getRconPassword(server, passwordOverride),
-    timeoutMs: 9000,
+    timeoutMs: timeoutMs ?? 9000,
   });
 }
 
@@ -150,10 +150,13 @@ async function runServerCommand(
   server: ServerProfile,
   command: string,
   protocol: Exclude<RconProtocol, "EXPERIMENTAL">,
+  timeoutMs?: number,
 ) {
   let client: WebRconClient | SourceRconClient;
   try {
-    client = protocol === "WEBRCON" ? webClientFor(server) : sourceClientFor(server);
+    client = protocol === "WEBRCON"
+      ? webClientFor(server, undefined, undefined, timeoutMs)
+      : sourceClientFor(server, undefined, timeoutMs);
   } catch (error) {
     const details = buildRconErrorDetails(server, error);
     throw Object.assign(new Error(details.message), { details });
@@ -181,6 +184,7 @@ async function persistRconError(server: ServerProfile, details: ReturnType<typeo
 export async function executeServerCommand(
   server: ServerProfile,
   command: string,
+  timeoutMs?: number,
 ) {
   const connectionDetails = getRconConnectionDetails(server);
   logRconSelection(server, command, connectionDetails);
@@ -197,7 +201,7 @@ export async function executeServerCommand(
   }
 
   try {
-    const output = await runServerCommand(server, command, connectionDetails.normalizedRconType);
+    const output = await runServerCommand(server, command, connectionDetails.normalizedRconType, timeoutMs);
     await prisma.serverEvent.deleteMany({
       where: {
         serverId: server.id,

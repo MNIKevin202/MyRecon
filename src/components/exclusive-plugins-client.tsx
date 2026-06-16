@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   Check,
   ChevronRight,
+  Clipboard,
   Download,
   Lock,
   RefreshCw,
@@ -258,26 +259,51 @@ function now() {
 
 function PluginTerminal({ lines, onClear }: { lines: LogLine[]; onClear: () => void }) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [copied, setCopied] = useState(false);
+
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [lines]);
+
+  function copyAll() {
+    const text = lines.map((l) => `${l.ts}  ${l.text}`).join("\n");
+    void navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
   return (
-    <div className="mt-3 overflow-hidden rounded-lg border border-white/[0.07] bg-[#060a0d]">
-      <div className="flex items-center gap-1.5 border-b border-white/[0.06] px-3 py-1.5">
-        <Terminal className="h-3 w-3 shrink-0 text-slate-600" />
-        <span className="flex-1 text-[10px] font-semibold uppercase tracking-wider text-slate-600">Console</span>
-        <button onClick={onClear} className="text-[10px] text-slate-700 hover:text-slate-400 transition">clear</button>
+    <div className="overflow-hidden rounded-xl border border-white/[0.07] bg-[#060a0d]">
+      <div className="flex items-center gap-2 border-b border-white/[0.06] px-4 py-2">
+        <Terminal className="h-3.5 w-3.5 shrink-0 text-slate-600" />
+        <span className="flex-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Console Output</span>
+        <button
+          onClick={copyAll}
+          disabled={lines.length === 0}
+          className="flex items-center gap-1 rounded px-2 py-0.5 text-[10px] text-slate-600 hover:bg-white/[0.05] hover:text-slate-300 disabled:opacity-30 transition"
+        >
+          {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Clipboard className="h-3 w-3" />}
+          {copied ? "Copied!" : "Copy"}
+        </button>
+        <button
+          onClick={onClear}
+          disabled={lines.length === 0}
+          className="flex items-center gap-1 rounded px-2 py-0.5 text-[10px] text-slate-600 hover:bg-white/[0.05] hover:text-slate-300 disabled:opacity-30 transition"
+        >
+          <X className="h-3 w-3" /> Clear
+        </button>
       </div>
-      <div className="max-h-40 overflow-y-auto px-3 py-2 font-mono text-[11px] leading-relaxed">
+      <div className="max-h-56 overflow-y-auto px-4 py-3 font-mono text-[11px] leading-relaxed">
         {lines.length === 0 ? (
-          <span className="text-slate-700">No output yet.</span>
+          <span className="text-slate-700">No output yet — run Install, Reload, or Uninstall to see results here.</span>
         ) : (
           lines.map((l, i) => (
-            <div key={i} className="flex gap-2">
-              <span className="shrink-0 text-slate-700">{l.ts}</span>
+            <div key={i} className="flex gap-3">
+              <span className="shrink-0 select-none text-slate-700">{l.ts}</span>
               <span className={clsx(
-                l.kind === "ok"  && "text-emerald-400",
-                l.kind === "err" && "text-red-400",
-                l.kind === "cmd" && "text-amber-300",
-                l.kind === "info" && "text-slate-400",
+                l.kind === "ok"   && "text-emerald-400",
+                l.kind === "err"  && "text-red-400",
+                l.kind === "cmd"  && "text-amber-300",
+                l.kind === "info" && "text-slate-500",
               )}>{l.text}</span>
             </div>
           ))
@@ -317,14 +343,14 @@ function ActionBtn({
 }
 
 function PluginCard({
-  plugin, servers, installedVersions, onInstalled, onUninstalled, showConsole,
+  plugin, servers, installedVersions, onInstalled, onUninstalled, addLog,
 }: {
   plugin: PluginMeta;
   servers: ServerOption[];
   installedVersions: Record<string, string>;
   onInstalled: (sid: string, version: string) => void;
   onUninstalled: (sid: string) => void;
-  showConsole: boolean;
+  addLog: (text: string, kind?: LogLine["kind"]) => void;
 }) {
   const defaultId =
     servers.find((s) => s.isDefault && s.sftpEnabled)?.id ??
@@ -340,11 +366,6 @@ function PluginCard({
   const [reloadMsg, setReloadMsg]     = useState("");
   const [uninstallMsg, setUninstallMsg] = useState("");
   const [showManage, setShowManage]   = useState(false);
-  const [logs, setLogs]               = useState<LogLine[]>([]);
-
-  function addLog(text: string, kind: LogLine["kind"] = "info") {
-    setLogs((prev) => [...prev, { ts: now(), text, kind }]);
-  }
 
   const server           = servers.find((s) => s.id === serverId);
   const canInstall       = !!server?.sftpEnabled;
@@ -423,7 +444,7 @@ function PluginCard({
         </div>
 
         {/* Body */}
-        <div className={clsx("px-4 pt-3", showConsole && logs.length > 0 ? "pb-2" : "pb-4")}>
+        <div className="px-4 pt-3 pb-4">
           <div className="flex items-start gap-2 min-w-0">
             <h3 className="text-sm font-semibold text-white">{plugin.name}</h3>
             <span className="shrink-0 rounded bg-white/[0.07] px-1.5 py-0.5 font-mono text-[10px] text-slate-500">
@@ -548,12 +569,6 @@ function PluginCard({
           </div>
         </div>
 
-        {/* Terminal */}
-        {showConsole && logs.length > 0 && (
-          <div className="px-3 pb-3">
-            <PluginTerminal lines={logs} onClear={() => setLogs([])} />
-          </div>
-        )}
       </div>
 
       {showManage && server && (
@@ -584,6 +599,12 @@ export function ExclusivePluginsClient({
       localStorage.setItem("ep_showConsole", String(!v));
       return !v;
     });
+  }
+
+  // Shared console log — all plugin actions write here
+  const [consoleLogs, setConsoleLogs] = useState<LogLine[]>([]);
+  function addLog(text: string, kind: LogLine["kind"] = "info") {
+    setConsoleLogs((prev) => [...prev, { ts: now(), text, kind }]);
   }
 
   // Local version map updated optimistically after install/uninstall
@@ -688,11 +709,16 @@ export function ExclusivePluginsClient({
                 installedVersions={merged}
                 onInstalled={(sid, ver) => handleInstalled(plugin.id, sid, ver)}
                 onUninstalled={(sid) => handleUninstalled(plugin.id, sid)}
-                showConsole={showConsole}
+                addLog={addLog}
               />
             );
           })}
         </div>
+      )}
+
+      {/* Shared full-width console */}
+      {showConsole && (
+        <PluginTerminal lines={consoleLogs} onClear={() => setConsoleLogs([])} />
       )}
     </div>
   );

@@ -30,10 +30,13 @@ export async function POST(request: NextRequest, { params }: Params) {
   let usedCommand = "";
   const errors: string[] = [];
 
+  // Plugin compile can take several seconds — use a generous timeout
+  const reloadTimeoutMs = 30_000;
+
   for (const cmd of [`oxide.reload ${pluginName}`, `c.reload ${pluginName}`]) {
     logs.push(`> ${cmd}`);
     try {
-      raw = await executeServerCommand(server, cmd);
+      raw = await executeServerCommand(server, cmd, reloadTimeoutMs);
       usedCommand = cmd;
       break;
     } catch (err) {
