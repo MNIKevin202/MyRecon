@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("MyRconAdminPanel", "MyRcon", "1.3.1")]
+    [Info("MyRconAdminPanel", "MyRcon", "1.3.2")]
     [Description("MyRcon exclusive in-game admin dashboard")]
     public class MyRconAdminPanel : RustPlugin
     {
@@ -403,7 +403,7 @@ namespace Oxide.Plugins
                 ui.Add(new CuiButton {
                     Button        = { Command = "mrap.nav home", Color = "0 0 0 0" },
                     RectTransform = { AnchorMin = "0.012 0.1", AnchorMax = "0.075 0.88" },
-                    Text          = { Text = "← Back", FontSize = 10, Align = TextAnchor.MiddleLeft, Color = CMuted, Font = "robotocondensed-regular.ttf" }
+                    Text          = { Text = "< Back", FontSize = 10, Align = TextAnchor.MiddleLeft, Color = CMuted, Font = "robotocondensed-regular.ttf" }
                 }, "MRAP_H");
                 ui.Add(new CuiPanel { Image = { Color = CDivider }, RectTransform = { AnchorMin = "0.074 0.2", AnchorMax = "0.077 0.8" } }, "MRAP_H");
             }
@@ -430,7 +430,7 @@ namespace Oxide.Plugins
             ui.Add(new CuiButton {
                 Button        = { Command = "mrap.close", Color = "0.65 0.15 0.1 0.7" },
                 RectTransform = { AnchorMin = "0.93 0.1", AnchorMax = "0.997 0.88" },
-                Text          = { Text = "✕", FontSize = 16, Align = TextAnchor.MiddleCenter, Color = "1 0.75 0.7 1", Font = "robotocondensed-bold.ttf" }
+                Text          = { Text = "X", FontSize = 16, Align = TextAnchor.MiddleCenter, Color = "1 0.75 0.7 1", Font = "robotocondensed-bold.ttf" }
             }, "MRAP_H");
         }
 
@@ -594,8 +594,8 @@ namespace Oxide.Plugins
             }
 
             ui.Add(new CuiLabel { Text = { Text = $"{s.Cat}  ·  {items.Count} items  ·  {s.GivePage + 1}/{pages}", FontSize = 9, Align = TextAnchor.MiddleLeft, Color = CDim, Font = "robotocondensed-regular.ttf" }, RectTransform = { AnchorMin = "0.01 0.005", AnchorMax = "0.55 0.075" } }, gridN);
-            if (s.GivePage > 0) ui.Add(new CuiButton { Button = { Command = $"mrap.page {s.GivePage - 1}", Color = CCell }, RectTransform = { AnchorMin = "0.57 0.008", AnchorMax = "0.77 0.078" }, Text = { Text = "◄  Prev", FontSize = 10, Align = TextAnchor.MiddleCenter, Color = CMuted } }, gridN);
-            if (s.GivePage < pages - 1) ui.Add(new CuiButton { Button = { Command = $"mrap.page {s.GivePage + 1}", Color = CCell }, RectTransform = { AnchorMin = "0.79 0.008", AnchorMax = "0.998 0.078" }, Text = { Text = "Next  ►", FontSize = 10, Align = TextAnchor.MiddleCenter, Color = CMuted } }, gridN);
+            if (s.GivePage > 0) ui.Add(new CuiButton { Button = { Command = $"mrap.page {s.GivePage - 1}", Color = CCell }, RectTransform = { AnchorMin = "0.57 0.008", AnchorMax = "0.77 0.078" }, Text = { Text = "< Prev", FontSize = 10, Align = TextAnchor.MiddleCenter, Color = CMuted } }, gridN);
+            if (s.GivePage < pages - 1) ui.Add(new CuiButton { Button = { Command = $"mrap.page {s.GivePage + 1}", Color = CCell }, RectTransform = { AnchorMin = "0.79 0.008", AnchorMax = "0.998 0.078" }, Text = { Text = "Next >", FontSize = 10, Align = TextAnchor.MiddleCenter, Color = CMuted } }, gridN);
 
             // Give panel
             if (s.Item != null) DrawGivePanel(ui, s, invoker, GiveCooldownLeft(s));
@@ -697,7 +697,7 @@ namespace Oxide.Plugins
                 // Steam ID
                 ui.Add(new CuiLabel { Text = { Text = pl.UserIDString, FontSize = 8, Align = TextAnchor.MiddleLeft, Color = CDim, Font = "robotocondensed-regular.ttf" }, RectTransform = { AnchorMin = "0.055 0", AnchorMax = "0.75 0.4" } }, rn);
                 // Ping
-                ui.Add(new CuiLabel { Text = { Text = $"{pl.currentPing}ms", FontSize = 9, Align = TextAnchor.MiddleRight, Color = CDim, Font = "robotocondensed-regular.ttf" }, RectTransform = { AnchorMin = "0.75 0", AnchorMax = "0.97 1" } }, rn);
+                ui.Add(new CuiLabel { Text = { Text = Network.Net.sv.GetAveragePing(pl.Connection) + "ms", FontSize = 9, Align = TextAnchor.MiddleRight, Color = CDim, Font = "robotocondensed-regular.ttf" }, RectTransform = { AnchorMin = "0.75 0", AnchorMax = "0.97 1" } }, rn);
 
                 if (!isSelf) ui.Add(new CuiButton { Button = { Command = $"mrap.psel {pl.userID}", Color = "0 0 0 0" }, RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1" }, Text = { Text = "" } }, rn);
             }
@@ -707,8 +707,8 @@ namespace Oxide.Plugins
 
             // Pagination
             ui.Add(new CuiLabel { Text = { Text = $"Page {s.PlayerPage + 1} / {pages}", FontSize = 9, Align = TextAnchor.MiddleLeft, Color = CDim }, RectTransform = { AnchorMin = "0.02 0", AnchorMax = "0.5 0.05" } }, listN);
-            if (s.PlayerPage > 0)       ui.Add(new CuiButton { Button = { Command = $"mrap.ppage {s.PlayerPage - 1}", Color = CCell }, RectTransform = { AnchorMin = "0.5 0", AnchorMax = "0.73 0.048" }, Text = { Text = "◄", FontSize = 10, Align = TextAnchor.MiddleCenter, Color = CMuted } }, listN);
-            if (s.PlayerPage < pages-1) ui.Add(new CuiButton { Button = { Command = $"mrap.ppage {s.PlayerPage + 1}", Color = CCell }, RectTransform = { AnchorMin = "0.75 0", AnchorMax = "0.98 0.048" }, Text = { Text = "►", FontSize = 10, Align = TextAnchor.MiddleCenter, Color = CMuted } }, listN);
+            if (s.PlayerPage > 0)       ui.Add(new CuiButton { Button = { Command = $"mrap.ppage {s.PlayerPage - 1}", Color = CCell }, RectTransform = { AnchorMin = "0.5 0", AnchorMax = "0.73 0.048" }, Text = { Text = "<", FontSize = 10, Align = TextAnchor.MiddleCenter, Color = CMuted } }, listN);
+            if (s.PlayerPage < pages-1) ui.Add(new CuiButton { Button = { Command = $"mrap.ppage {s.PlayerPage + 1}", Color = CCell }, RectTransform = { AnchorMin = "0.75 0", AnchorMax = "0.98 0.048" }, Text = { Text = ">", FontSize = 10, Align = TextAnchor.MiddleCenter, Color = CMuted } }, listN);
 
             // Right: action panel (40%)
             string actN = "MRAP_PA";
@@ -718,7 +718,7 @@ namespace Oxide.Plugins
             var sel2 = s.PlayerSel != 0 ? BasePlayer.FindByID(s.PlayerSel) : null;
 
             if (sel2 == null) {
-                ui.Add(new CuiLabel { Text = { Text = "← Select a player\nto see actions", FontSize = 11, Align = TextAnchor.MiddleCenter, Color = CDim, Font = "robotocondensed-regular.ttf" }, RectTransform = { AnchorMin = "0.05 0.35", AnchorMax = "0.95 0.65" } }, actN);
+                ui.Add(new CuiLabel { Text = { Text = "Select a player\nto see actions", FontSize = 11, Align = TextAnchor.MiddleCenter, Color = CDim, Font = "robotocondensed-regular.ttf" }, RectTransform = { AnchorMin = "0.05 0.35", AnchorMax = "0.95 0.65" } }, actN);
             } else {
                 // Selected player header
                 ui.Add(new CuiPanel { Image = { Color = "0.05 0.06 0.08 1" }, RectTransform = { AnchorMin = "0 0.9", AnchorMax = "1 1" } }, actN, "MRAP_PAH");
