@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("MyRconAdminPanel", "MyRcon", "1.1.0")]
+    [Info("MyRconAdminPanel", "MyRcon", "1.2.0")]
     [Description("MyRcon exclusive in-game admin panel — Give Item UI")]
     public class MyRconAdminPanel : RustPlugin
     {
@@ -29,6 +29,11 @@ namespace Oxide.Plugins
         private const string CMuted     = "0.52 0.57 0.63 1";
         private const string CDim       = "0.3 0.35 0.4 1";
         private const string CBtnOff    = "0.1 0.13 0.17 1";
+        private const string CCooldown  = "0.55 0.18 0.08 1"; // give-on-cooldown button
+
+        // ── Rate limiting ─────────────────────────────────────────────────────
+        private const double GiveCooldownSecs = 2.0;  // min seconds between gives per player
+        private const double DrawThrottleMs   = 200.0; // min ms between UI redraws per player
 
         // ── Grid ─────────────────────────────────────────────────────────────
         private const int Cols    = 6;
@@ -122,23 +127,42 @@ namespace Oxide.Plugins
         // ── Per-player state ──────────────────────────────────────────────────
         private class S
         {
-            public string Cat     = "All";
-            public int    Page    = 0;
-            public string Item    = null;
-            public string Name    = null;
-            public int    Stack   = 1;
-            public ulong  Target  = 0;
-            public string Amt     = "100";
-            public int    Custom  = 100;
+            public string   Cat        = "All";
+            public int      Page       = 0;
+            public string   Item       = null;
+            public string   Name       = null;
+            public int      Stack      = 1;
+            public ulong    Target     = 0;
+            public string   Amt        = "100";
+            public int      Custom     = 100;
+            public DateTime LastGiveAt = DateTime.MinValue; // spam guard on give
+            public DateTime LastDrawAt = DateTime.MinValue; // spam guard on redraws
         }
 
         private readonly Dictionary<ulong, S> _s = new Dictionary<ulong, S>();
         private S Get(BasePlayer p) { if (!_s.ContainsKey(p.userID)) _s[p.userID] = new S(); return _s[p.userID]; }
 
+        // Returns seconds remaining on give cooldown (0 = ready)
+        private double GiveCooldownLeft(S s)
+        {
+            double elapsed = (DateTime.UtcNow - s.LastGiveAt).TotalSeconds;
+            return elapsed >= GiveCooldownSecs ? 0.0 : GiveCooldownSecs - elapsed;
+        }
+
+        // Returns true if a UI redraw should proceed (throttles to DrawThrottleMs)
+        private bool AllowDraw(S s)
+        {
+            double elapsed = (DateTime.UtcNow - s.LastDrawAt).TotalMilliseconds;
+            if (elapsed < DrawThrottleMs) return false;
+            s.LastDrawAt = DateTime.UtcNow;
+            return true;
+        }
+
         // ── Oxide hooks ───────────────────────────────────────────────────────
         void Init() => permission.RegisterPermission(PermUse, this);
         void Unload() { foreach (var p in BasePlayer.activePlayerList) CuiHelper.DestroyUi(p, UiMain); _s.Clear(); }
         void OnPlayerDisconnected(BasePlayer p, string r) { CuiHelper.DestroyUi(p, UiMain); _s.Remove(p.userID); }
+        void OnPlayerSleepEnded(BasePlayer p) { CuiHelper.DestroyUi(p, UiMain); }
 
         [ChatCommand("ap")]
         void CmdAp(BasePlayer p, string c, string[] a) => Open(p);
@@ -204,23 +228,37 @@ namespace Oxide.Plugins
         {
             var p = a.Player(); if (p == null) return;
             var s = Get(p); if (string.IsNullOrEmpty(s.Item) || s.Target == 0) return;
+
+            // Enforce give cooldown
+            double left = GiveCooldownLeft(s);
+            if (left > 0)
+            {
+                // Redraw so the button shows the remaining time
+                Draw(p, force: true);
+                return;
+            }
+
             var tgt = BasePlayer.FindByID(s.Target);
             if (tgt == null) { SendReply(p, "<color=#F06A0F>MyRcon</color>: Player disconnected."); return; }
             int amt  = Resolve(s);
             var item = ItemManager.CreateByName(s.Item, amt);
             if (item == null) { SendReply(p, $"<color=#F06A0F>MyRcon</color>: Unknown item."); return; }
             tgt.GiveItem(item);
+            s.LastGiveAt = DateTime.UtcNow;
             Puts($"[AdminPanel] {p.displayName} gave {amt}x {s.Item} → {tgt.displayName}");
             SendReply(p, $"<color=#F06A0F>MyRcon</color>: Gave <color=#fff>{amt:N0}×</color> <color=#F06A0F>{s.Name}</color> to <color=#fff>{tgt.displayName}</color>.");
-            s.Target = 0; Draw(p);
+            s.Target = 0; Draw(p, force: true);
         }
 
         // ── Draw ──────────────────────────────────────────────────────────────
 
-        void Draw(BasePlayer player)
+        void Draw(BasePlayer player, bool force = false)
         {
+            var s = Get(player);
+            // Throttle rapid redraws from button spam — skip unless forced
+            if (!force && !AllowDraw(s)) return;
+
             CuiHelper.DestroyUi(player, UiMain);
-            var s  = Get(player);
             var ui = new CuiElementContainer();
 
             // Root — compact centered panel, not full-screen
@@ -235,7 +273,7 @@ namespace Oxide.Plugins
             DrawHeader(ui, s);
             DrawCategoryTabs(ui, s);
             DrawGrid(ui, s);
-            if (s.Item != null) DrawGivePanel(ui, s, player);
+            if (s.Item != null) DrawGivePanel(ui, s, player, GiveCooldownLeft(s));
 
             CuiHelper.AddUi(player, ui);
         }
@@ -450,7 +488,7 @@ namespace Oxide.Plugins
 
         // ── Give panel ────────────────────────────────────────────────────────
 
-        void DrawGivePanel(CuiElementContainer ui, S s, BasePlayer invoker)
+        void DrawGivePanel(CuiElementContainer ui, S s, BasePlayer invoker, double cooldownLeft)
         {
             ui.Add(new CuiPanel
             {
@@ -644,12 +682,23 @@ namespace Oxide.Plugins
             }, UiGive);
 
             // ── GIVE button ───────────────────────────────────────────────────
-            bool can = s.Target != 0;
+            bool   can      = s.Target != 0;
+            bool   onCd     = cooldownLeft > 0;
+            string btnCmd   = (can && !onCd) ? "mrap.give" : "";
+            string btnColor = onCd ? CCooldown : (can ? COrange : CBtnOff);
+            string btnText;
+            if (onCd)
+                btnText = $"Wait  {cooldownLeft:F1}s…";
+            else if (can)
+                btnText = $"Give  {res:N0} ×";
+            else
+                btnText = "Select a player";
+
             ui.Add(new CuiButton
             {
-                Button        = { Command = can ? "mrap.give" : "", Color = can ? COrange : CBtnOff },
+                Button        = { Command = btnCmd, Color = btnColor },
                 RectTransform = { AnchorMin = "0.04 0.022", AnchorMax = "0.96 0.098" },
-                Text          = { Text = can ? $"Give  {res:N0} ×" : "Select a player", FontSize = 12, Align = TextAnchor.MiddleCenter, Color = can ? "1 1 1 1" : CDim, Font = "robotocondensed-bold.ttf" }
+                Text          = { Text = btnText, FontSize = 12, Align = TextAnchor.MiddleCenter, Color = (can && !onCd) ? "1 1 1 1" : CDim, Font = "robotocondensed-bold.ttf" }
             }, UiGive);
         }
 
