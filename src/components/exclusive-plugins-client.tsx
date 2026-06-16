@@ -19,7 +19,6 @@ import {
   Zap,
 } from "lucide-react";
 import { clsx } from "@/lib/utils";
-import { Button } from "@/components/ui";
 
 type PluginMeta = {
   id: string;
