@@ -12,6 +12,7 @@ import {
   Gauge,
   LayoutDashboard,
   LayoutGrid,
+  Lock,
   LogOut,
   MessageSquare,
   PlugZap,
@@ -49,7 +50,8 @@ const navSections: NavSection[] = [
   {
     label: "MyRcon",
     items: [
-      { href: "/admin-panel", label: "Admin Panel", icon: LayoutGrid },
+      { href: "/admin-panel",        label: "Admin Panel",       icon: LayoutGrid },
+      { href: "/exclusive-plugins",  label: "Exclusive Plugins", icon: Lock },
     ],
   },
 ];
