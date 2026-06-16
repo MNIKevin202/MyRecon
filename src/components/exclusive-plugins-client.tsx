@@ -11,6 +11,7 @@ import {
   Settings2,
   ShieldCheck,
   ShieldOff,
+  Trash2,
   UserPlus,
   X,
   Zap,
@@ -256,13 +257,14 @@ function ActionBtn({
   onClick: () => void;
   disabled?: boolean;
   children: ReactNode;
-  variant?: "default" | "ok" | "warn";
+  variant?: "default" | "ok" | "warn" | "danger";
 }) {
   const base = "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition disabled:opacity-40";
   const colors = {
     default: "border-white/[0.08] text-slate-400 hover:bg-white/[0.06] hover:text-white",
     ok:      "border-emerald-500/25 bg-emerald-500/[0.08] text-emerald-400 hover:bg-emerald-500/[0.13]",
     warn:    "border-amber-500/30 bg-amber-500/[0.08] text-amber-400 hover:bg-amber-500/[0.14]",
+    danger:  "border-red-500/25 bg-red-500/[0.07] text-red-400 hover:bg-red-500/[0.14]",
   };
   return (
     <button onClick={onClick} disabled={disabled || state === "busy"} className={clsx(base, colors[variant])}>
@@ -273,13 +275,13 @@ function ActionBtn({
 }
 
 function PluginCard({
-  plugin, servers, installedVersions, onInstalled,
+  plugin, servers, installedVersions, onInstalled, onUninstalled,
 }: {
   plugin: PluginMeta;
   servers: ServerOption[];
-  // serverId → installedVersion (or undefined if not installed)
   installedVersions: Record<string, string>;
   onInstalled: (sid: string, version: string) => void;
+  onUninstalled: (sid: string) => void;
 }) {
   const defaultId =
     servers.find((s) => s.isDefault && s.sftpEnabled)?.id ??
@@ -287,14 +289,18 @@ function PluginCard({
     servers[0]?.id ?? "";
 
   const [serverId, setServerId]     = useState(defaultId);
-  const [installState, setInstall]  = useState<ActionState>("idle");
-  const [reloadState, setReload]    = useState<ActionState>("idle");
-  const [errMsg, setErrMsg]         = useState("");
-  const [reloadMsg, setReloadMsg]   = useState("");
-  const [showManage, setShowManage] = useState(false);
+  const [installState, setInstall]    = useState<ActionState>("idle");
+  const [reloadState, setReload]      = useState<ActionState>("idle");
+  const [uninstallState, setUninstall] = useState<ActionState>("idle");
+  const [confirmUninstall, setConfirm] = useState(false);
+  const [errMsg, setErrMsg]           = useState("");
+  const [reloadMsg, setReloadMsg]     = useState("");
+  const [uninstallMsg, setUninstallMsg] = useState("");
+  const [showManage, setShowManage]   = useState(false);
 
   const server           = servers.find((s) => s.id === serverId);
   const canInstall       = !!server?.sftpEnabled;
+  const canUninstall     = !!server?.sftpEnabled;
   const installedVersion = installedVersions[serverId];
   const isInstalled      = !!installedVersion;
   const hasUpdate        = isInstalled && installedVersion !== plugin.version;
@@ -311,6 +317,20 @@ function PluginCard({
       if (!res.ok || !data.success) { setErrMsg(data.error ?? "Failed"); setInstall("err"); }
       else { setInstall("ok"); onInstalled(serverId, data.version ?? plugin.version); }
     } catch { setErrMsg("Network error."); setInstall("err"); }
+  }
+
+  async function uninstall() {
+    if (!serverId || !canUninstall) return;
+    setUninstall("busy"); setUninstallMsg(""); setConfirm(false);
+    try {
+      const res  = await fetch(`/api/exclusive-plugins/${plugin.id}/uninstall`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ serverId }),
+      });
+      const data = (await res.json()) as { success?: boolean; error?: string };
+      if (!res.ok || !data.success) { setUninstallMsg(data.error ?? "Uninstall failed"); setUninstall("err"); }
+      else { setUninstall("idle"); setInstall("idle"); onUninstalled(serverId); }
+    } catch { setUninstallMsg("Network error."); setUninstall("err"); }
   }
 
   async function reload() {
@@ -384,7 +404,7 @@ function PluginCard({
             <div className="flex items-center gap-1.5">
               <select
                 value={serverId}
-                onChange={(e) => { setServerId(e.target.value); setInstall("idle"); setReload("idle"); setErrMsg(""); setReloadMsg(""); }}
+                onChange={(e) => { setServerId(e.target.value); setInstall("idle"); setReload("idle"); setUninstall("idle"); setConfirm(false); setErrMsg(""); setReloadMsg(""); setUninstallMsg(""); }}
                 className="rounded-lg border border-white/[0.08] bg-white/[0.04] px-2 py-1 text-xs text-slate-300 outline-none focus:border-orange-400"
               >
                 {servers.map((s) => {
@@ -403,8 +423,9 @@ function PluginCard({
             </div>
 
             {/* Feedback messages */}
-            {errMsg    && <p className="text-[11px] text-red-400">{errMsg}</p>}
-            {reloadMsg && <p className={clsx("text-[11px]", reloadState === "err" ? "text-red-400" : "text-emerald-400")}>{reloadMsg}</p>}
+            {errMsg        && <p className="text-[11px] text-red-400">{errMsg}</p>}
+            {reloadMsg     && <p className={clsx("text-[11px]", reloadState === "err" ? "text-red-400" : "text-emerald-400")}>{reloadMsg}</p>}
+            {uninstallMsg  && <p className="text-[11px] text-red-400">{uninstallMsg}</p>}
 
             {/* Buttons */}
             <div className="flex flex-wrap items-center gap-1.5">
@@ -421,6 +442,29 @@ function PluginCard({
                   <RefreshCw className={clsx("h-3 w-3", reloadState === "busy" && "animate-spin")} />
                   {reloadState === "ok" ? "Reloaded" : "Reload"}
                 </ActionBtn>
+              )}
+
+              {/* Uninstall — confirm-then-act */}
+              {isInstalled && (
+                confirmUninstall ? (
+                  <div className="flex items-center gap-1">
+                    <span className="text-[10px] text-red-400">Remove file?</span>
+                    <ActionBtn state={uninstallState} onClick={() => void uninstall()} variant="danger" disabled={!canUninstall}>
+                      <Trash2 className="h-3 w-3" />
+                      {uninstallState === "busy" ? "Removing…" : "Confirm"}
+                    </ActionBtn>
+                    <button
+                      onClick={() => setConfirm(false)}
+                      className="rounded-lg border border-white/[0.08] px-2 py-1.5 text-[11px] text-slate-500 hover:text-white transition"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <ActionBtn state="idle" onClick={() => setConfirm(true)} variant="danger">
+                    <Trash2 className="h-3 w-3" /> Uninstall
+                  </ActionBtn>
+                )
               )}
 
               {/* Install / Update / Installed */}
@@ -468,14 +512,33 @@ export function ExclusivePluginsClient({
   // pluginId → { serverId → installedVersion }
   installedOn: Record<string, Record<string, string>>;
 }) {
-  // Local version map updated optimistically after install
+  // Local version map updated optimistically after install/uninstall
   const [localVersions, setLocalVersions] = useState<Record<string, Record<string, string>>>({});
+  const [localUninstalled, setLocalUninstalled] = useState<Record<string, Set<string>>>({});
 
   function handleInstalled(pluginId: string, serverId: string, version: string) {
     setLocalVersions((prev) => ({
       ...prev,
       [pluginId]: { ...(prev[pluginId] ?? {}), [serverId]: version },
     }));
+    setLocalUninstalled((prev) => {
+      const next = new Set(prev[pluginId]);
+      next.delete(serverId);
+      return { ...prev, [pluginId]: next };
+    });
+  }
+
+  function handleUninstalled(pluginId: string, serverId: string) {
+    setLocalUninstalled((prev) => {
+      const next = new Set(prev[pluginId]);
+      next.add(serverId);
+      return { ...prev, [pluginId]: next };
+    });
+    setLocalVersions((prev) => {
+      const copy = { ...(prev[pluginId] ?? {}) };
+      delete copy[serverId];
+      return { ...prev, [pluginId]: copy };
+    });
   }
 
   return (
@@ -503,12 +566,16 @@ export function ExclusivePluginsClient({
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {plugins.map((plugin) => {
-            const versions = { ...(installedOn[plugin.id] ?? {}), ...(localVersions[plugin.id] ?? {}) };
+            const base = installedOn[plugin.id] ?? {};
+            const removed = localUninstalled[plugin.id] ?? new Set<string>();
+            const merged  = { ...base, ...(localVersions[plugin.id] ?? {}) };
+            for (const sid of removed) delete merged[sid];
             return (
               <PluginCard
                 key={plugin.id} plugin={plugin} servers={servers}
-                installedVersions={versions}
+                installedVersions={merged}
                 onInstalled={(sid, ver) => handleInstalled(plugin.id, sid, ver)}
+                onUninstalled={(sid) => handleUninstalled(plugin.id, sid)}
               />
             );
           })}
