@@ -20,10 +20,13 @@ export async function POST(request: NextRequest, { params }: Params) {
   const server = await prisma.serverProfile.findUnique({ where: { id: body.serverId } });
   if (!server) return NextResponse.json({ error: "Server not found" }, { status: 404 });
   if (!server.sftpEnabled) {
-    return NextResponse.json({ error: "SFTP is not enabled for this server. Enable it in Server Settings." }, { status: 400 });
+    return NextResponse.json(
+      { error: "SFTP is not enabled for this server. Enable it in Server Settings." },
+      { status: 400 },
+    );
   }
 
-  // Resolve install path: prefer sftpDefaultPluginPath, fall back to sftpRootPath + defaultPath
+  // Resolve install path
   let installPath: string;
   if (server.sftpDefaultPluginPath) {
     installPath = `${server.sftpDefaultPluginPath.replace(/\/$/, "")}/${plugin.filename}`;
@@ -36,15 +39,32 @@ export async function POST(request: NextRequest, { params }: Params) {
     );
   }
 
+  // Fetch the latest .cs source from GitHub
+  let content: string;
+  let version = plugin.version;
   try {
-    await writeTextFile(server, installPath, plugin.content);
-    // Store "version|path" so the UI can detect when an update is available
+    const ghRes = await fetch(plugin.contentUrl, { cache: "no-store" });
+    if (!ghRes.ok) throw new Error(`GitHub returned ${ghRes.status} for ${plugin.contentUrl}`);
+    content = await ghRes.text();
+
+    // Extract version from [Info("...", "...", "x.y.z")] attribute
+    const match = content.match(/\[Info\([^,]+,\s*[^,]+,\s*"([^"]+)"\s*\)\]/);
+    if (match?.[1]) version = match[1];
+  } catch (err) {
+    return NextResponse.json(
+      { error: `Failed to fetch plugin from GitHub: ${err instanceof Error ? err.message : String(err)}` },
+      { status: 502 },
+    );
+  }
+
+  try {
+    await writeTextFile(server, installPath, content);
     await prisma.appSetting.upsert({
-      where: { key: `plugin_installed:${pluginId}:${body.serverId}` },
-      update: { value: `${plugin.version}|${installPath}` },
-      create: { key: `plugin_installed:${pluginId}:${body.serverId}`, value: `${plugin.version}|${installPath}` },
+      where:  { key: `plugin_installed:${pluginId}:${body.serverId}` },
+      update: { value: `${version}|${installPath}` },
+      create: { key: `plugin_installed:${pluginId}:${body.serverId}`, value: `${version}|${installPath}` },
     });
-    return NextResponse.json({ success: true, path: installPath, version: plugin.version });
+    return NextResponse.json({ success: true, path: installPath, version });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "SFTP write failed" },

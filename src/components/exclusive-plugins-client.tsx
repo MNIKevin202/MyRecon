@@ -29,6 +29,7 @@ type PluginMeta = {
   filename: string;
   permissions: string[];
   previewItems: string[];
+  contentUrl: string;
 };
 
 type ServerOption = {

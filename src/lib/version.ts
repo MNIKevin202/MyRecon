@@ -1,2 +1,2 @@
-export const APP_VERSION = "0.1.38";
-export const BUILD_STAMP = "2026-06-16-plugin-unicode-fix";
+export const APP_VERSION = "0.1.39";
+export const BUILD_STAMP = "2026-06-16-github-plugin-fetch";
