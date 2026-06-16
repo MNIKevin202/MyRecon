@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("MyRconReclaim", "MyRcon", "1.0.1")]
+    [Info("MyRconReclaim", "MyRcon", "1.0.2")]
     [Description("PvE server cleanup and abandoned asset management for MyRCON")]
     public class MyRconReclaim : RustPlugin
     {
