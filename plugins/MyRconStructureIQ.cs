@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("MyRconStructureIQ", "MyRcon", "1.0.0")]
+    [Info("MyRconStructureIQ", "MyRcon", "1.0.1")]
     [Description("PvE server structure analytics and base intelligence for MyRCON")]
     public class MyRconStructureIQ : RustPlugin
     {
@@ -498,7 +498,7 @@ namespace Oxide.Plugins
         void ConsoleGetStructures(ConsoleSystem.Arg arg)
         {
             if (!IsRconOrAdmin(arg)) { arg.ReplyWith(Err("No permission")); return; }
-            var args = arg.Args ?? new string[0];
+            var args = GetArgStrings(arg);
             int page    = args.Length > 0 ? ParseInt(args[0], 0) : 0;
             int size    = args.Length > 1 ? ParseInt(args[1], 100) : 100;
             string sort = args.Length > 2 ? args[2].ToLower() : "score";
@@ -536,7 +536,7 @@ namespace Oxide.Plugins
         void ConsoleGetOwners(ConsoleSystem.Arg arg)
         {
             if (!IsRconOrAdmin(arg)) { arg.ReplyWith(Err("No permission")); return; }
-            var args = arg.Args ?? new string[0];
+            var args = GetArgStrings(arg);
             int page = args.Length > 0 ? ParseInt(args[0], 0) : 0;
             int size = args.Length > 1 ? ParseInt(args[1], 50) : 50;
 
@@ -589,7 +589,7 @@ namespace Oxide.Plugins
         void ConsoleGetLimits(ConsoleSystem.Arg arg)
         {
             if (!IsRconOrAdmin(arg)) { arg.ReplyWith(Err("No permission")); return; }
-            var args = arg.Args ?? new string[0];
+            var args = GetArgStrings(arg);
             int page = args.Length > 0 ? ParseInt(args[0], 0) : 0;
             int size = args.Length > 1 ? ParseInt(args[1], 50) : 50;
             var flagged = _data.Structures.Values
@@ -687,7 +687,7 @@ namespace Oxide.Plugins
         void ConsoleNote(ConsoleSystem.Arg arg)
         {
             if (!IsRconOrAdmin(arg)) { arg.ReplyWith(Err("No permission")); return; }
-            var args = arg.Args ?? new string[0];
+            var args = GetArgStrings(arg);
             if (args.Length < 2) { arg.ReplyWith(Err("id and message required")); return; }
             string id      = args[0];
             string message = string.Join(" ", args.Skip(1));
@@ -829,6 +829,9 @@ namespace Oxide.Plugins
             var p = arg.Player();
             return p != null && (p.IsAdmin || permission.UserHasPermission(p.UserIDString, PermAdmin));
         }
+
+        static string[] GetArgStrings(ConsoleSystem.Arg arg) =>
+            arg.HasArgs() ? System.Array.ConvertAll(arg.Args, a => a.ToString()) : new string[0];
 
         static int    ParseInt(string s, int def)  { int v; return int.TryParse(s, out v) ? v : def; }
         static int    RuleOrder(string r)           => r == "Severe" ? 2 : r == "Warning" ? 1 : 0;
