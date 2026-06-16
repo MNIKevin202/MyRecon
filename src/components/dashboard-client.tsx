@@ -150,6 +150,19 @@ export function DashboardClient({ servers }: { servers: Server[] }) {
           : data.inferredConnectionStatus,
       );
       setNotice(null);
+      if (selected) {
+        fetch("/api/notifications/check", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            serverId,
+            serverName: selected.name,
+            online: data.status.online,
+            fps: data.status.fps ?? null,
+            memoryMb: data.status.memoryMb ?? null,
+          }),
+        }).catch(() => undefined);
+      }
     } catch (error) {
       setNotice(error instanceof Error ? `Status refresh failed: ${error.message}` : "Status refresh failed");
     } finally {

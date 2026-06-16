@@ -146,6 +146,28 @@ model AppSetting {
   updatedAt DateTime @updatedAt
 }
 
+model AppNotification {
+  id        String   @id @default(cuid())
+  type      String
+  title     String
+  message   String
+  serverId  String?
+  read      Boolean  @default(false)
+  saved     Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([read, createdAt])
+}
+
+model NotificationRule {
+  id        String   @id @default(cuid())
+  type      String   @unique
+  enabled   Boolean  @default(true)
+  threshold Float?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model PluginPermissionAssignment {
   id         String        @id @default(cuid())
   serverId   String
