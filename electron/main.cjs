@@ -15,9 +15,7 @@ function configureAutoUpdates() {
     return;
   }
 
-  // On Windows: download automatically and install silently.
-  // On macOS: unsigned builds can't self-update, so just notify.
-  autoUpdater.autoDownload = process.platform !== "darwin";
+  autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = false;
 
   autoUpdater.on("error", (error) => {
