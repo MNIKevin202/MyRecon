@@ -127,14 +127,20 @@ async function connectFtp(server: ServerProfile): Promise<RemoteFs> {
     // Many FTPS servers (vsftpd with require_ssl_reuse) reset the data socket
     // unless it resumes the control connection's TLS session — the exact cause
     // of "read ECONNRESET (data socket)". FileZilla does this automatically;
-    // basic-ftp does not, so inject the control session into the TLS options
-    // used for passive data connections.
+    // basic-ftp does not. Keep the latest control-connection TLS session in the
+    // data-connection TLS options. We track the socket's "session" event because
+    // the session ticket can arrive after login and rotate between transfers, so
+    // a one-time capture isn't enough for multi-list operations (folder scans).
     try {
-      const ctrl = client.ftp.socket as unknown as { getSession?: () => Buffer | undefined };
-      const session = ctrl.getSession?.();
-      if (session) {
-        client.ftp.tlsOptions = { ...client.ftp.tlsOptions, session };
-      }
+      const ctrl = client.ftp.socket as unknown as {
+        getSession?: () => Buffer | undefined;
+        on?: (event: string, cb: (session: Buffer) => void) => void;
+      };
+      const applySession = (session?: Buffer) => {
+        if (session) client.ftp.tlsOptions = { ...client.ftp.tlsOptions, session };
+      };
+      applySession(ctrl.getSession?.());
+      ctrl.on?.("session", (session) => applySession(session));
     } catch {
       // best effort — fall through and let the transfer attempt proceed
     }
@@ -142,9 +148,24 @@ async function connectFtp(server: ServerProfile): Promise<RemoteFs> {
     client = await open(false);
   }
 
+  // Retry a data-channel op once on ECONNRESET: the FTPS session ticket can
+  // arrive just after login, so the first transfer occasionally races it.
+  // Re-apply the current control session and try again.
+  async function dataOp<T>(fn: () => Promise<T>): Promise<T> {
+    try {
+      return await fn();
+    } catch (error) {
+      if (!String((error as Error)?.message ?? "").includes("ECONNRESET")) throw error;
+      const ctrl = client.ftp.socket as unknown as { getSession?: () => Buffer | undefined };
+      const session = ctrl.getSession?.();
+      if (session) client.ftp.tlsOptions = { ...client.ftp.tlsOptions, session };
+      return await fn();
+    }
+  }
+
   return {
     async list(path) {
-      const entries = await client.list(path);
+      const entries = await dataOp(() => client.list(path));
       return entries.map((e) => ({
         name: e.name,
         type: e.isDirectory ? "d" : "-",
@@ -177,18 +198,20 @@ async function connectFtp(server: ServerProfile): Promise<RemoteFs> {
       }
     },
     async getBuffer(path) {
-      const chunks: Buffer[] = [];
-      const sink = new Writable({
-        write(chunk, _enc, cb) {
-          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-          cb();
-        },
+      return dataOp(async () => {
+        const chunks: Buffer[] = [];
+        const sink = new Writable({
+          write(chunk, _enc, cb) {
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+            cb();
+          },
+        });
+        await client.downloadTo(sink, path);
+        return Buffer.concat(chunks);
       });
-      await client.downloadTo(sink, path);
-      return Buffer.concat(chunks);
     },
     async putBuffer(data, path) {
-      await client.uploadFrom(Readable.from(data), path);
+      await dataOp(() => client.uploadFrom(Readable.from(data), path));
     },
     async delete(path) {
       await client.remove(path);
