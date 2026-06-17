@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Copy, RefreshCw, ShieldCheck, ShieldPlus, UserMinus, Users } from "lucide-react";
+import { ClipboardCopy, Copy, RefreshCw, ShieldCheck, ShieldPlus, UserMinus, Users } from "lucide-react";
 import { Button, Field, Input, Panel, Select } from "@/components/ui";
 import { api, clsx } from "@/lib/utils";
 
@@ -246,6 +246,30 @@ export function PermissionsClient({ servers }: { servers: Server[] }) {
     }
   }
 
+  async function copySetupCommands() {
+    if (!serverId) return;
+    setBusy("export");
+    setNotice("Reading server permissions…");
+    try {
+      const data = await api<{ framework: string; commands: string[]; groupCount: number; userCount: number }>(
+        `/api/servers/${serverId}/permissions/export`,
+      );
+      if (data.commands.length === 0) {
+        setNotice("No permission assignments found to copy.");
+        return;
+      }
+      await copyText(data.commands.join("\n"));
+      const cmdCount = data.commands.filter((c) => !c.startsWith("#")).length;
+      setNotice(
+        `Copied ${cmdCount} ${data.framework} command(s) for ${data.groupCount} group(s) and ${data.userCount} player(s). Paste into the target server console.`,
+      );
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not export permissions");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <div className="grid min-w-0 gap-6">
       <div className="flex min-w-0 flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
@@ -259,6 +283,9 @@ export function PermissionsClient({ servers }: { servers: Server[] }) {
           </Select>
           <Button variant="secondary" onClick={() => loadPermissions()} disabled={busy === "load"}>
             <RefreshCw className="h-4 w-4" />Refresh
+          </Button>
+          <Button variant="secondary" onClick={copySetupCommands} disabled={busy === "export"}>
+            <ClipboardCopy className="h-4 w-4" />Copy Setup Commands
           </Button>
         </div>
       </div>

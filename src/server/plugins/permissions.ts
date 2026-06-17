@@ -1,6 +1,7 @@
 import { ServerProfile } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { executeServerCommand } from "@/server/rcon/service";
+import { withSftp, joinRemotePath } from "@/server/sftp/service";
 
 export type PluginPermissionFramework = "AUTO" | "CARBON" | "OXIDE";
 
@@ -318,6 +319,96 @@ export async function listPluginPermissionAccess(
     source: syncRcon ? "saved+rcon" : "saved",
     users: mergePermissionUsers([...savedUsers, ...rconUsers]),
   };
+}
+
+// ── Export setup commands ─────────────────────────────────────────────────────
+// Reads the server's permission data files over SFTP (groups + users) and
+// generates the full list of grant/group/usergroup commands needed to
+// reproduce the same admin/mod/permission setup on another server.
+
+type OxideGroup = { Perms?: string[]; ParentGroup?: string };
+type OxideUser = { Perms?: string[]; Groups?: string[]; LastSeenNickname?: string };
+
+function dataDirCandidates(server: ServerProfile) {
+  const root = (server.sftpRootPath ?? "").replace(/\/$/, "");
+  if (!root) throw new Error("Server has no SFTP root path configured. Set it in Server Settings.");
+  const framework = (server.modFramework ?? "oxide").toLowerCase();
+  const carbon = `${root}/carbon/data`;
+  const oxide = `${root}/oxide/data`;
+  return framework === "carbon" ? [carbon, oxide] : [oxide, carbon];
+}
+
+async function readJsonFile<T>(server: ServerProfile, dir: string, name: string): Promise<T | null> {
+  return withSftp(server, "perm-export", dir, async (client) => {
+    const remotePath = joinRemotePath(dir, name);
+    try {
+      const data = await client.get(remotePath);
+      const text = Buffer.isBuffer(data) ? data.toString("utf8") : String(data);
+      return JSON.parse(text) as T;
+    } catch {
+      return null;
+    }
+  });
+}
+
+export async function exportPermissionSetupCommands(server: ServerProfile) {
+  if (!server.sftpEnabled) {
+    throw new Error("SFTP is not enabled for this server. Enable it in Server Settings.");
+  }
+
+  const framework = (server.modFramework ?? "oxide").toLowerCase();
+  const prefix = framework === "carbon" ? "c" : "oxide";
+
+  // Locate the data directory that actually holds the permission files
+  let groups: Record<string, OxideGroup> | null = null;
+  let users: Record<string, OxideUser> | null = null;
+
+  for (const dir of dataDirCandidates(server)) {
+    const g = await readJsonFile<Record<string, OxideGroup>>(server, dir, "oxide.groups.data.json");
+    const u = await readJsonFile<Record<string, OxideUser>>(server, dir, "oxide.users.data.json");
+    if (g || u) {
+      groups = g;
+      users = u;
+      break;
+    }
+  }
+
+  if (!groups && !users) {
+    throw new Error(
+      "Could not find oxide.groups.data.json / oxide.users.data.json under the server's data directory.",
+    );
+  }
+
+  const builtin = new Set(["default", "admin"]);
+  const commands: string[] = [];
+  let groupCount = 0;
+  let userCount = 0;
+
+  // Groups: create (non-builtin), set parent, then grant each permission
+  for (const [name, group] of Object.entries(groups ?? {})) {
+    const perms = group.Perms ?? [];
+    const parent = group.ParentGroup?.trim();
+    const isBuiltin = builtin.has(name.toLowerCase());
+    if (!isBuiltin) commands.push(`${prefix}.group add ${name}`);
+    if (parent) commands.push(`${prefix}.group parent ${name} ${parent}`);
+    for (const perm of perms) commands.push(`${prefix}.grant group ${name} ${perm}`);
+    if (!isBuiltin || perms.length > 0) groupCount++;
+  }
+
+  // Users: grant direct permissions and group memberships (skip default group)
+  for (const [steamId, user] of Object.entries(users ?? {})) {
+    if (!/^\d{15,20}$/.test(steamId)) continue;
+    const perms = user.Perms ?? [];
+    const memberOf = (user.Groups ?? []).filter((g) => g.toLowerCase() !== "default");
+    if (perms.length === 0 && memberOf.length === 0) continue;
+    const nick = user.LastSeenNickname?.trim();
+    if (nick) commands.push(`# ${nick} (${steamId})`);
+    for (const perm of perms) commands.push(`${prefix}.grant user ${steamId} ${perm}`);
+    for (const group of memberOf) commands.push(`${prefix}.usergroup add ${steamId} ${group}`);
+    userCount++;
+  }
+
+  return { framework: framework === "carbon" ? "CARBON" : "OXIDE", commands, groupCount, userCount };
 }
 
 export async function revokePluginPermission(server: ServerProfile, steamId: string, permission: string, framework?: string | null) {
