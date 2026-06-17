@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("MyRconStructureIQ", "MyRcon", "1.0.1")]
+    [Info("MyRconStructureIQ", "MyRcon", "1.0.2")]
     [Description("PvE server structure analytics and base intelligence for MyRCON")]
     public class MyRconStructureIQ : RustPlugin
     {
@@ -215,64 +215,81 @@ namespace Oxide.Plugins
             _isScanning = true;
             if (invoker != null) SendReply(invoker, Prefix("Scanning structures..."));
 
-            try
+            // Collect all entities in one pass (fast — no per-entity work yet)
+            long now = UnixNow();
+            var tcEntities    = new List<BaseEntity>();
+            var otherEntities = new List<BaseEntity>();
+
+            foreach (BaseNetworkable net in BaseNetworkable.serverEntities)
             {
-                long now = UnixNow();
-
-                // Single pass — collect TCs and all other entities separately
-                var tcEntities    = new List<BaseEntity>();
-                var otherEntities = new List<BaseEntity>();
-
-                foreach (BaseNetworkable net in BaseNetworkable.serverEntities)
-                {
-                    if (net == null || net.IsDestroyed) continue;
-                    var entity = net as BaseEntity;
-                    if (entity == null) continue;
-
-                    if (entity.ShortPrefabName == "cupboard.tool.deployed")
-                        tcEntities.Add(entity);
-                    else
-                        otherEntities.Add(entity);
-                }
-
-                var structures = new Dictionary<string, StructureEntry>();
-                var summary    = new ScanSummary();
-
-                foreach (var tc in tcEntities)
-                {
-                    if (tc == null || tc.IsDestroyed) continue;
-                    var entry = BuildStructureEntry(tc, otherEntities, now);
-                    if (entry == null) continue;
-
-                    // Merge persisted admin data
-                    entry.IsProtected = _data.Protected.Contains(entry.Id);
-                    entry.IsIgnored   = _data.Ignored.Contains(entry.Id);
-                    _data.Notes.TryGetValue(entry.Id, out entry.AdminNote);
-                    StructureEntry old;
-                    if (_data.Structures.TryGetValue(entry.Id, out old)) entry.Name = old.Name;
-
-                    structures[entry.Id] = entry;
-
-                    summary.TotalStructures++;
-                    summary.TotalEntities += entry.EntityCount;
-                    if (entry.SizeClass == "Massive" || entry.SizeClass == "Extreme") summary.MassiveBuilds++;
-                    if (entry.PerformanceScore >= _cfg.PerformanceHighScore)           summary.HighImpact++;
-                    if (entry.RuleStatus == "Warning" || entry.RuleStatus == "Severe") summary.OverLimit++;
-                    if (entry.IsProtected)                                             summary.ProtectedCount++;
-                    if (entry.OwnershipConfidence == "Unknown")                        summary.UnknownOwnership++;
-                }
-
-                _data.Structures   = structures;
-                _data.LastScan     = summary;
-                _data.LastScanTime = DateTime.UtcNow.ToString("o");
-                SaveData();
-
-                if (invoker != null)
-                    SendReply(invoker, Prefix(string.Format(
-                        "Done. Structures: {0} | High Impact: {1} | Over Limit: {2} | Massive: {3}",
-                        summary.TotalStructures, summary.HighImpact, summary.OverLimit, summary.MassiveBuilds)));
+                if (net == null || net.IsDestroyed) continue;
+                var entity = net as BaseEntity;
+                if (entity == null) continue;
+                if (entity.ShortPrefabName == "cupboard.tool.deployed")
+                    tcEntities.Add(entity);
+                else
+                    otherEntities.Add(entity);
             }
-            finally { _isScanning = false; }
+
+            // Process TCs in small batches, yielding between each so the server
+            // keeps ticking and RCON stays responsive.
+            var structures = new Dictionary<string, StructureEntry>();
+            var summary    = new ScanSummary();
+            ProcessScanBatch(tcEntities, otherEntities, structures, summary, 0, now, invoker);
+        }
+
+        // Processes up to BatchSize TCs then schedules itself for the next frame.
+        void ProcessScanBatch(
+            List<BaseEntity> tcs, List<BaseEntity> others,
+            Dictionary<string, StructureEntry> structures, ScanSummary summary,
+            int startIdx, long now, BasePlayer invoker)
+        {
+            const int BatchSize = 5;
+            int end = Math.Min(startIdx + BatchSize, tcs.Count);
+
+            for (int i = startIdx; i < end; i++)
+            {
+                var tc = tcs[i];
+                if (tc == null || tc.IsDestroyed) continue;
+                var entry = BuildStructureEntry(tc, others, now);
+                if (entry == null) continue;
+
+                entry.IsProtected = _data.Protected.Contains(entry.Id);
+                entry.IsIgnored   = _data.Ignored.Contains(entry.Id);
+                _data.Notes.TryGetValue(entry.Id, out entry.AdminNote);
+                StructureEntry old;
+                if (_data.Structures.TryGetValue(entry.Id, out old)) entry.Name = old.Name;
+
+                structures[entry.Id] = entry;
+
+                summary.TotalStructures++;
+                summary.TotalEntities += entry.EntityCount;
+                if (entry.SizeClass == "Massive" || entry.SizeClass == "Extreme") summary.MassiveBuilds++;
+                if (entry.PerformanceScore >= _cfg.PerformanceHighScore)           summary.HighImpact++;
+                if (entry.RuleStatus == "Warning" || entry.RuleStatus == "Severe") summary.OverLimit++;
+                if (entry.IsProtected)                                             summary.ProtectedCount++;
+                if (entry.OwnershipConfidence == "Unknown")                        summary.UnknownOwnership++;
+            }
+
+            if (end < tcs.Count)
+            {
+                // Yield to next tick then continue
+                int next = end;
+                timer.Once(0f, () => ProcessScanBatch(tcs, others, structures, summary, next, now, invoker));
+                return;
+            }
+
+            // All TCs processed — commit results
+            _data.Structures   = structures;
+            _data.LastScan     = summary;
+            _data.LastScanTime = DateTime.UtcNow.ToString("o");
+            SaveData();
+            _isScanning = false;
+
+            if (invoker != null)
+                SendReply(invoker, Prefix(string.Format(
+                    "Done. Structures: {0} | High Impact: {1} | Over Limit: {2} | Massive: {3}",
+                    summary.TotalStructures, summary.HighImpact, summary.OverLimit, summary.MassiveBuilds)));
         }
 
         StructureEntry BuildStructureEntry(BaseEntity tc, List<BaseEntity> others, long now)

@@ -16,7 +16,7 @@
     ]
   },
   "structure-iq": {
-    "version": "1.0.1",
+    "version": "1.0.2",
     "contentUrl": "https://raw.githubusercontent.com/MNIKevin202/MyRecon/main/plugins/MyRconStructureIQ.cs",
     "name": "StructureIQ",
     "description": "PvE server structure analytics. Scan bases, track entity counts, score performance impact, check build limits, and inspect ownership confidence.",
