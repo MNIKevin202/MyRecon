@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Pencil, Plus, Power, Star, Trash2 } from "lucide-react";
+import { Check, Copy, Pencil, Plus, Power, Star, Trash2 } from "lucide-react";
 import { Button, Field, Input, Panel, Select } from "@/components/ui";
 import { api, clsx } from "@/lib/utils";
 
@@ -46,7 +46,7 @@ const blank = {
   sftpAllowOutsideRoot: false,
 };
 
-type Tab = "saved" | "add";
+type Tab = "saved" | "add" | "copy";
 
 export function ServerManager({ initialServers }: { initialServers: Server[] }) {
   const [servers, setServers] = useState(initialServers);
@@ -55,6 +55,42 @@ export function ServerManager({ initialServers }: { initialServers: Server[] }) 
   const [form, setForm] = useState(blank);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // Copy Plugins tab state
+  const [copySource, setCopySource] = useState("");
+  const [copyTarget, setCopyTarget] = useState("");
+  const [copyBusy, setCopyBusy] = useState(false);
+  const [copyLogs, setCopyLogs] = useState<string[]>([]);
+
+  async function copyPlugins() {
+    if (!copySource || !copyTarget) {
+      setMessage("Choose both a source and a target server.");
+      return;
+    }
+    if (copySource === copyTarget) {
+      setMessage("Source and target must be different servers.");
+      return;
+    }
+    setCopyBusy(true);
+    setCopyLogs([]);
+    setMessage(null);
+    try {
+      const data = await api<{ success: boolean; copied: string[]; failed: string[]; logs: string[] }>(
+        `/api/servers/${copySource}/copy-plugins`,
+        { method: "POST", body: JSON.stringify({ targetServerId: copyTarget }) },
+      );
+      setCopyLogs(data.logs ?? []);
+      setMessage(
+        data.success
+          ? `Copied ${data.copied.length} plugin(s) successfully.`
+          : `Finished with ${data.failed.length} failure(s) — see log below.`,
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Copy failed");
+    } finally {
+      setCopyBusy(false);
+    }
+  }
 
   function update(key: keyof typeof blank, value: string | number | boolean) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -206,6 +242,7 @@ export function ServerManager({ initialServers }: { initialServers: Server[] }) 
   const tabs: { id: Tab; label: string }[] = [
     { id: "saved", label: "Saved Servers" },
     { id: "add", label: editing ? "Edit Server" : "Add a Server" },
+    { id: "copy", label: "Copy Plugins" },
   ];
 
   return (
@@ -363,6 +400,50 @@ export function ServerManager({ initialServers }: { initialServers: Server[] }) 
             </div>
           </Panel>
         </div>
+      )}
+
+      {tab === "copy" && (
+        <Panel className="max-w-2xl">
+          <div className="mb-1 flex items-center gap-2">
+            <Copy className="h-5 w-5 text-orange-300" />
+            <h2 className="text-lg font-semibold">Copy Installed Plugins</h2>
+          </div>
+          <p className="mb-5 text-sm text-slate-400">
+            Copies every exclusive plugin installed on the source server to the target server via SFTP,
+            then reloads each one. The target server must have SFTP enabled.
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="From (source)">
+              <Select value={copySource} onChange={(event) => setCopySource(event.target.value)}>
+                <option value="">Select a server…</option>
+                {servers.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="To (target)" hint="Must have SFTP enabled.">
+              <Select value={copyTarget} onChange={(event) => setCopyTarget(event.target.value)}>
+                <option value="">Select a server…</option>
+                {servers.map((s) => (
+                  <option key={s.id} value={s.id} disabled={!s.sftpEnabled}>
+                    {s.name}{s.sftpEnabled ? "" : " (SFTP off)"}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </div>
+          <div className="mt-5">
+            <Button onClick={copyPlugins} disabled={copyBusy || !copySource || !copyTarget}>
+              <Copy className="h-4 w-4" />
+              {copyBusy ? "Copying…" : "Copy Plugins"}
+            </Button>
+          </div>
+          {copyLogs.length > 0 && (
+            <pre className="mt-4 max-h-72 overflow-y-auto whitespace-pre-wrap rounded-md border border-white/10 bg-black/40 p-3 font-mono text-xs text-slate-300">
+              {copyLogs.join("\n")}
+            </pre>
+          )}
+        </Panel>
       )}
     </div>
   );
