@@ -10,16 +10,24 @@
 // selecting one on startup simply sets that flag (same mechanism as the
 // "Default" button on the Servers page).
 
-let selectedThisLaunch = false;
+// Stored on globalThis rather than a module-level variable: Next.js bundles
+// route handlers and page/layout code into separate chunks, so a plain module
+// variable is NOT shared between the /select route handler (which sets it) and
+// the panel layout (which reads it). globalThis is a single instance across all
+// bundles in the same process, so the flag is shared — and still resets each
+// launch since the desktop app starts a fresh process.
+const KEY = "__myrcon_serverSelectedThisLaunch";
+
+type GlobalWithFlag = typeof globalThis & { [KEY]?: boolean };
 
 export function markServerSelected() {
-  selectedThisLaunch = true;
+  (globalThis as GlobalWithFlag)[KEY] = true;
 }
 
 export function hasSelectedServer() {
-  return selectedThisLaunch;
+  return (globalThis as GlobalWithFlag)[KEY] === true;
 }
 
 export function resetServerSelection() {
-  selectedThisLaunch = false;
+  (globalThis as GlobalWithFlag)[KEY] = false;
 }
