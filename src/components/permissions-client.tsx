@@ -92,6 +92,7 @@ export function PermissionsClient({ servers }: { servers: Server[] }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
   const [bulkSearch, setBulkSearch] = useState("");
+  const [selectedPermissions, setSelectedPermissions] = useState<Set<string>>(new Set());
 
   const selectedPlayer = useMemo(
     () => players.find((player) => player.steamId === selectedSteamId) ?? null,
@@ -272,6 +273,40 @@ export function PermissionsClient({ servers }: { servers: Server[] }) {
     }
   }
 
+  async function grantSelectedPermissions(ids: string[], named: Array<{ steamId: string; name: string }>) {
+    const perms = [...selectedPermissions];
+    if (perms.length === 0) {
+      setNotice("Tick one or more permissions in the list first.");
+      return;
+    }
+    if (!serverId || ids.length === 0) {
+      setNotice("Choose at least one player.");
+      return;
+    }
+    if (!window.confirm(`Grant ${perms.length} permission(s) to ${ids.length} player(s)?`)) return;
+
+    setBusy("multi");
+    setNotice(`Granting ${perms.length} permission(s) to ${ids.length} player(s)...`);
+    let failures = 0;
+    try {
+      for (const perm of perms) {
+        const data = await api<{ granted: string[]; failed: Array<{ steamId: string }> }>(
+          `/api/servers/${serverId}/permissions/grant-bulk`,
+          { method: "POST", body: JSON.stringify({ steamIds: ids, permission: perm, framework, players: named }) },
+        );
+        failures += data.failed.length;
+      }
+      setNotice(
+        `Granted ${perms.length} permission(s) to ${ids.length} player(s)${failures ? `, ${failures} grant(s) failed` : ""}.`,
+      );
+      await loadPermissions(true);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Multi-permission grant failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function grantAdmin(ids: string[], named: Array<{ steamId: string; name: string }>) {
     if (!serverId || ids.length === 0) {
       setNotice("Choose at least one player to make admin.");
@@ -413,21 +448,53 @@ export function PermissionsClient({ servers }: { servers: Server[] }) {
           <Field label="Search">
             <Input value={permissionSearch} onChange={(event) => setPermissionSearch(event.target.value)} placeholder="Permission or plugin" />
           </Field>
-          <div className="mt-4 grid gap-2">
+          <div className="mt-3 flex items-center justify-between text-xs text-slate-400">
+            <span>{selectedPermissions.size} selected</span>
+            <div className="flex gap-3">
+              <button
+                className="text-orange-300 hover:underline"
+                onClick={() => setSelectedPermissions(new Set(filteredPermissions.map((p) => p.permission)))}
+              >
+                Select all
+              </button>
+              <button
+                className="text-slate-400 hover:underline disabled:opacity-40"
+                onClick={() => setSelectedPermissions(new Set())}
+                disabled={selectedPermissions.size === 0}
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+          <div className="mt-3 grid gap-2">
             {filteredPermissions.length === 0 ? <p className="text-sm text-slate-500">No saved permissions yet. Create one on the right.</p> : null}
             {filteredPermissions.map((item) => (
-              <button
+              <div
                 key={item.permission}
-                onClick={() => selectPermission(item)}
                 className={clsx(
-                  "rounded-md border p-3 text-left transition",
+                  "flex items-start gap-3 rounded-md border p-3 transition",
                   permission.trim().toLowerCase() === item.permission ? "border-orange-500/60 bg-orange-500/10" : "border-white/10 bg-black/20 hover:bg-white/[0.06]",
                 )}
               >
-                <div className="break-all font-mono text-sm font-semibold text-white">{item.permission}</div>
-                <div className="mt-1 text-xs text-slate-400">{item.count} assignment{item.count === 1 ? "" : "s"} - {item.framework}</div>
-                {item.pluginNames.length ? <div className="mt-1 truncate text-xs text-slate-500">{item.pluginNames.join(", ")}</div> : null}
-              </button>
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={selectedPermissions.has(item.permission)}
+                  onChange={() =>
+                    setSelectedPermissions((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(item.permission)) next.delete(item.permission);
+                      else next.add(item.permission);
+                      return next;
+                    })
+                  }
+                />
+                <button onClick={() => selectPermission(item)} className="min-w-0 flex-1 text-left">
+                  <div className="break-all font-mono text-sm font-semibold text-white">{item.permission}</div>
+                  <div className="mt-1 text-xs text-slate-400">{item.count} assignment{item.count === 1 ? "" : "s"} - {item.framework}</div>
+                  {item.pluginNames.length ? <div className="mt-1 truncate text-xs text-slate-500">{item.pluginNames.join(", ")}</div> : null}
+                </button>
+              </div>
             ))}
           </div>
         </Panel>
@@ -526,6 +593,14 @@ export function PermissionsClient({ servers }: { servers: Server[] }) {
                   >
                     <Crown className="h-4 w-4" />Grant Admin
                   </Button>
+                  {selectedPermissions.size > 0 && (
+                    <Button
+                      onClick={() => grantSelectedPermissions([targetSteamId], [{ steamId: targetSteamId, name: targetName }])}
+                      disabled={busy === "multi" || !targetSteamId}
+                    >
+                      <ShieldPlus className="h-4 w-4" />Grant {selectedPermissions.size} selected
+                    </Button>
+                  )}
                 </div>
                 {selectedPlayer ? (
                   <div className="rounded-md border border-white/10 bg-black/20 p-3 text-xs text-slate-400">
@@ -616,6 +691,19 @@ export function PermissionsClient({ servers }: { servers: Server[] }) {
                 >
                   <Crown className="h-4 w-4" />Grant Admin to selected
                 </Button>
+                {selectedPermissions.size > 0 && (
+                  <Button
+                    onClick={() =>
+                      grantSelectedPermissions(
+                        [...bulkSelected],
+                        players.filter((p) => bulkSelected.has(p.steamId)).map((p) => ({ steamId: p.steamId, name: p.name })),
+                      )
+                    }
+                    disabled={busy === "multi" || bulkSelected.size === 0}
+                  >
+                    <ShieldPlus className="h-4 w-4" />Grant {selectedPermissions.size} selected perms
+                  </Button>
+                )}
               </div>
             </div>
           </Panel>
