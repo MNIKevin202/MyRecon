@@ -116,7 +116,14 @@ async function connectFtp(server: ServerProfile): Promise<RemoteFs> {
       user,
       password,
       secure,
-      secureOptions: secure ? { rejectUnauthorized: false } : undefined,
+      // Pin TLS 1.2: vsftpd-style FTPS servers (HostHavoc) require the data
+      // connection to resume the control connection's TLS session. Under TLS
+      // 1.3 the resumable session arrives via a late ticket and races the first
+      // data transfer, resetting the socket. With TLS 1.2 the session is
+      // available immediately after the handshake, so resumption is reliable.
+      secureOptions: secure
+        ? { rejectUnauthorized: false, minVersion: "TLSv1.2", maxVersion: "TLSv1.2" }
+        : undefined,
     });
     return c;
   }
