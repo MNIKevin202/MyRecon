@@ -306,8 +306,8 @@ function normalizeWebRconError(error: Error) {
   ) {
     return new RconConnectionError(
       "The RCON port closed the WebSocket handshake for WebRCON.",
-      "wrong_rcon_type",
-      "This usually means the port is reachable but is not speaking Rust WebRCON. Verify +rcon.web 1, the RCON port, and whether the host panel is exposing Legacy RCON instead.",
+      "wrong_password",
+      "Rust's WebRCON resets the connection when the password is wrong. Verify the RCON password in your server profile matches the +rcon.password used to start the server.",
     );
   }
 
