@@ -100,14 +100,33 @@ async function connectSftp(server: ServerProfile): Promise<RemoteFs> {
 
 // ── FTP (basic-ftp) ───────────────────────────────────────────────────────────
 async function connectFtp(server: ServerProfile): Promise<RemoteFs> {
-  const client = new ftp.Client(15000);
-  await client.access({
-    host: server.sftpHost!,
-    port: server.sftpPort,
-    user: server.sftpUsername!,
-    password: server.sftpPasswordEncrypted ? decryptSecret(server.sftpPasswordEncrypted) : "",
-    secure: false,
-  });
+  const host = server.sftpHost!;
+  const port = server.sftpPort;
+  const user = server.sftpUsername!;
+  const password = server.sftpPasswordEncrypted ? decryptSecret(server.sftpPasswordEncrypted) : "";
+
+  // Most managed hosts (HostHavoc, etc.) require "explicit FTP over TLS" (FTPS).
+  // Try explicit TLS first (accepting self-signed certs), then fall back to
+  // plain FTP if the server doesn't support TLS.
+  async function open(secure: boolean) {
+    const c = new ftp.Client(20000);
+    await c.access({
+      host,
+      port,
+      user,
+      password,
+      secure,
+      secureOptions: secure ? { rejectUnauthorized: false } : undefined,
+    });
+    return c;
+  }
+
+  let client: ftp.Client;
+  try {
+    client = await open(true);
+  } catch {
+    client = await open(false);
+  }
 
   return {
     async list(path) {
