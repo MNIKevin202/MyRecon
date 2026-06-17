@@ -124,6 +124,20 @@ async function connectFtp(server: ServerProfile): Promise<RemoteFs> {
   let client: ftp.Client;
   try {
     client = await open(true);
+    // Many FTPS servers (vsftpd with require_ssl_reuse) reset the data socket
+    // unless it resumes the control connection's TLS session — the exact cause
+    // of "read ECONNRESET (data socket)". FileZilla does this automatically;
+    // basic-ftp does not, so inject the control session into the TLS options
+    // used for passive data connections.
+    try {
+      const ctrl = client.ftp.socket as unknown as { getSession?: () => Buffer | undefined };
+      const session = ctrl.getSession?.();
+      if (session) {
+        client.ftp.tlsOptions = { ...client.ftp.tlsOptions, session };
+      }
+    } catch {
+      // best effort — fall through and let the transfer attempt proceed
+    }
   } catch {
     client = await open(false);
   }
