@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ClipboardCopy, Copy, RefreshCw, ShieldCheck, ShieldPlus, UserMinus, Users, Zap } from "lucide-react";
+import { ClipboardCopy, Copy, Crown, RefreshCw, ShieldCheck, ShieldPlus, UserMinus, Users, Zap } from "lucide-react";
 import { Button, Field, Input, Panel, Select } from "@/components/ui";
 import { api, clsx } from "@/lib/utils";
 
@@ -272,6 +272,30 @@ export function PermissionsClient({ servers }: { servers: Server[] }) {
     }
   }
 
+  async function grantAdmin(ids: string[], named: Array<{ steamId: string; name: string }>) {
+    if (!serverId || ids.length === 0) {
+      setNotice("Choose at least one player to make admin.");
+      return;
+    }
+    if (!window.confirm(`Make ${ids.length} player(s) a server admin (ownerid) and write the config?`)) return;
+
+    setBusy("admin");
+    setNotice(`Granting admin to ${ids.length} player(s)...`);
+    try {
+      const data = await api<{ granted: string[]; failed: Array<{ steamId: string }>; configSaved: boolean }>(
+        `/api/servers/${serverId}/permissions/grant-admin`,
+        { method: "POST", body: JSON.stringify({ steamIds: ids, level: "owner", players: named }) },
+      );
+      setNotice(
+        `Made ${data.granted.length} player(s) server admin${data.failed.length ? `, ${data.failed.length} failed` : ""}. ${data.configSaved ? "Config saved." : "Config write not confirmed — run server.writecfg if needed."}`,
+      );
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Grant admin failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function revokePermission(steamId: string) {
     const cleanPermission = permission.trim().toLowerCase();
     if (!serverId || !cleanPermission) return;
@@ -495,6 +519,13 @@ export function PermissionsClient({ servers }: { servers: Server[] }) {
                   <Button variant="secondary" onClick={grantFullAccess} disabled={busy === "grant" || !targetSteamId}>
                     <Zap className="h-4 w-4" />Grant Full Access
                   </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => grantAdmin([targetSteamId], [{ steamId: targetSteamId, name: targetName }])}
+                    disabled={busy === "admin" || !targetSteamId}
+                  >
+                    <Crown className="h-4 w-4" />Grant Admin
+                  </Button>
                 </div>
                 {selectedPlayer ? (
                   <div className="rounded-md border border-white/10 bg-black/20 p-3 text-xs text-slate-400">
@@ -572,6 +603,18 @@ export function PermissionsClient({ servers }: { servers: Server[] }) {
                 </Button>
                 <Button variant="secondary" onClick={() => bulkGrant(true)} disabled={busy === "bulk" || bulkSelected.size === 0}>
                   <Zap className="h-4 w-4" />Grant Full Access to selected
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() =>
+                    grantAdmin(
+                      [...bulkSelected],
+                      players.filter((p) => bulkSelected.has(p.steamId)).map((p) => ({ steamId: p.steamId, name: p.name })),
+                    )
+                  }
+                  disabled={busy === "admin" || bulkSelected.size === 0}
+                >
+                  <Crown className="h-4 w-4" />Grant Admin to selected
                 </Button>
               </div>
             </div>

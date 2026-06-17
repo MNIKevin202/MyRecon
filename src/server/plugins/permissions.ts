@@ -238,6 +238,50 @@ function cleanPermission(permission: string) {
   return clean;
 }
 
+// Make players server admins via Rust's ownerid/moderatorid auth system, then
+// persist with server.writecfg so it's written to cfg/users.cfg. This is the
+// real server auth level — separate from plugin permissions.
+function sanitizeAdminName(name?: string | null) {
+  return (name ?? "").replace(/["\r\n]/g, "").trim() || "admin";
+}
+
+export async function grantServerAdminBulk(
+  server: ServerProfile,
+  targets: Array<{ steamId: string; playerName?: string | null }>,
+  level: "owner" | "moderator" = "owner",
+) {
+  const command = level === "moderator" ? "moderatorid" : "ownerid";
+  const granted: string[] = [];
+  const failed: Array<{ steamId: string; error: string }> = [];
+
+  for (const target of targets) {
+    const id = target.steamId.trim();
+    if (!/^\d{15,20}$/.test(id)) {
+      failed.push({ steamId: target.steamId, error: "invalid SteamID" });
+      continue;
+    }
+    try {
+      await executeServerCommand(server, `${command} ${id} "${sanitizeAdminName(target.playerName)}"`);
+      granted.push(id);
+    } catch (error) {
+      failed.push({ steamId: id, error: error instanceof Error ? error.message : "command failed" });
+    }
+  }
+
+  // Persist to cfg/users.cfg so admin survives a restart
+  let configSaved = false;
+  if (granted.length > 0) {
+    try {
+      await executeServerCommand(server, "server.writecfg");
+      configSaved = true;
+    } catch {
+      // command sent but no/late response — treat as best effort
+    }
+  }
+
+  return { granted, failed, configSaved };
+}
+
 // Grant one permission (or "*" for full access) to many players at once.
 export async function grantPluginPermissionsBulk(
   server: ServerProfile,
