@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ClipboardCopy, Copy, RefreshCw, ShieldCheck, ShieldPlus, UserMinus, Users } from "lucide-react";
+import { ClipboardCopy, Copy, RefreshCw, ShieldCheck, ShieldPlus, UserMinus, Users, Zap } from "lucide-react";
 import { Button, Field, Input, Panel, Select } from "@/components/ui";
 import { api, clsx } from "@/lib/utils";
 
@@ -90,6 +90,8 @@ export function PermissionsClient({ servers }: { servers: Server[] }) {
   const [players, setPlayers] = useState<KnownPlayer[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
+  const [bulkSearch, setBulkSearch] = useState("");
 
   const selectedPlayer = useMemo(
     () => players.find((player) => player.steamId === selectedSteamId) ?? null,
@@ -120,6 +122,13 @@ export function PermissionsClient({ servers }: { servers: Server[] }) {
       return [player.name, player.steamId, player.aliases.join(" ")].join(" ").toLowerCase().includes(query);
     });
   }, [assignedSteamIds, playerSearch, players]);
+  const bulkFilteredPlayers = useMemo(() => {
+    const query = bulkSearch.trim().toLowerCase();
+    if (!query) return players;
+    return players.filter((player) =>
+      [player.name, player.steamId, player.aliases.join(" ")].join(" ").toLowerCase().includes(query),
+    );
+  }, [bulkSearch, players]);
 
   const loadPermissions = useCallback(async (quiet = false) => {
     if (!serverId) return;
@@ -194,6 +203,70 @@ export function PermissionsClient({ servers }: { servers: Server[] }) {
       setManualName("");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Permission grant failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function grantFullAccess() {
+    if (!serverId || !targetSteamId) {
+      setNotice("Choose a player before granting full access.");
+      return;
+    }
+    if (!window.confirm(`Give ${targetName} FULL access (every permission, "*") on this server?`)) return;
+
+    setBusy("grant");
+    setNotice("Granting full access...");
+    try {
+      await api(`/api/servers/${serverId}/permissions/grant`, {
+        method: "POST",
+        body: JSON.stringify({ steamId: targetSteamId, permission: "*", framework, playerName: targetName }),
+      });
+      setNotice(`Granted full access (*) to ${targetName}.`);
+      await loadPermissions(true);
+      setManualSteamId("");
+      setManualName("");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Full access grant failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function bulkGrant(fullAccess: boolean) {
+    const ids = [...bulkSelected];
+    if (!serverId || ids.length === 0) {
+      setNotice("Select at least one player for bulk grant.");
+      return;
+    }
+    const perm = fullAccess ? "*" : permission.trim().toLowerCase();
+    if (!perm) {
+      setNotice("Pick a permission first, or use Grant Full Access.");
+      return;
+    }
+    const label = fullAccess ? 'full access ("*")' : perm;
+    if (!window.confirm(`Grant ${label} to ${ids.length} player(s)?`)) return;
+
+    setBusy("bulk");
+    setNotice(`Granting ${label} to ${ids.length} player(s)...`);
+    try {
+      const playersPayload = players
+        .filter((p) => bulkSelected.has(p.steamId))
+        .map((p) => ({ steamId: p.steamId, name: p.name }));
+      const data = await api<{ granted: string[]; failed: Array<{ steamId: string; error: string }> }>(
+        `/api/servers/${serverId}/permissions/grant-bulk`,
+        {
+          method: "POST",
+          body: JSON.stringify({ steamIds: ids, permission: perm, framework, players: playersPayload }),
+        },
+      );
+      setNotice(
+        `Granted ${label} to ${data.granted.length} player(s)${data.failed.length ? `, ${data.failed.length} failed` : ""}.`,
+      );
+      setBulkSelected(new Set());
+      await loadPermissions(true);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Bulk grant failed");
     } finally {
       setBusy(null);
     }
@@ -415,9 +488,14 @@ export function PermissionsClient({ servers }: { servers: Server[] }) {
                 <Field label="Display name">
                   <Input value={manualName} onChange={(event) => setManualName(event.target.value)} placeholder={selectedPlayer?.name ?? "Optional"} />
                 </Field>
-                <Button onClick={grantPermission} disabled={busy === "grant" || !permission.trim() || !targetSteamId}>
-                  <ShieldPlus className="h-4 w-4" />Grant Permission
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={grantPermission} disabled={busy === "grant" || !permission.trim() || !targetSteamId}>
+                    <ShieldPlus className="h-4 w-4" />Grant Permission
+                  </Button>
+                  <Button variant="secondary" onClick={grantFullAccess} disabled={busy === "grant" || !targetSteamId}>
+                    <Zap className="h-4 w-4" />Grant Full Access
+                  </Button>
+                </div>
                 {selectedPlayer ? (
                   <div className="rounded-md border border-white/10 bg-black/20 p-3 text-xs text-slate-400">
                     <div className="font-semibold text-slate-200">{selectedPlayer.name}</div>
@@ -428,6 +506,76 @@ export function PermissionsClient({ servers }: { servers: Server[] }) {
               </div>
             </Panel>
           </div>
+
+          <Panel>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-white">Bulk Grant</h2>
+                <p className="mt-1 text-sm text-slate-400">
+                  Select players and grant them the chosen permission, or full access ("*"), all at once.
+                </p>
+              </div>
+              <span className="rounded-md bg-white/[0.06] px-2 py-1 text-xs text-slate-300">{bulkSelected.size} selected</span>
+            </div>
+
+            <div className="mt-4 grid gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Input
+                  value={bulkSearch}
+                  onChange={(event) => setBulkSearch(event.target.value)}
+                  placeholder="Search players by name, alias, or SteamID"
+                  className="min-w-48 flex-1"
+                />
+                <Button variant="secondary" onClick={() => setBulkSelected(new Set(bulkFilteredPlayers.map((p) => p.steamId)))}>
+                  Select all
+                </Button>
+                <Button variant="secondary" onClick={() => setBulkSelected(new Set())} disabled={bulkSelected.size === 0}>
+                  Clear
+                </Button>
+              </div>
+
+              <div className="max-h-64 overflow-y-auto rounded-md border border-white/10 bg-black/20">
+                {bulkFilteredPlayers.length === 0 ? (
+                  <p className="p-3 text-sm text-slate-500">No players found. Load players first.</p>
+                ) : (
+                  bulkFilteredPlayers.map((player) => (
+                    <label
+                      key={player.steamId}
+                      className="flex cursor-pointer items-center gap-3 border-b border-white/5 px-3 py-2 text-sm last:border-b-0 hover:bg-white/[0.04]"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={bulkSelected.has(player.steamId)}
+                        onChange={() =>
+                          setBulkSelected((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(player.steamId)) next.delete(player.steamId);
+                            else next.add(player.steamId);
+                            return next;
+                          })
+                        }
+                      />
+                      <span className="min-w-0 flex-1 truncate text-slate-200">
+                        {player.name}
+                        {player.online ? <span className="ml-2 text-xs text-emerald-400">online</span> : null}
+                      </span>
+                      <span className="font-mono text-xs text-slate-500">{player.steamId}</span>
+                    </label>
+                  ))
+                )}
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={() => bulkGrant(false)} disabled={busy === "bulk" || bulkSelected.size === 0 || !permission.trim()}>
+                  <ShieldPlus className="h-4 w-4" />
+                  Grant{permission.trim() ? ` "${permission.trim().toLowerCase()}"` : " permission"} to selected
+                </Button>
+                <Button variant="secondary" onClick={() => bulkGrant(true)} disabled={busy === "bulk" || bulkSelected.size === 0}>
+                  <Zap className="h-4 w-4" />Grant Full Access to selected
+                </Button>
+              </div>
+            </div>
+          </Panel>
         </div>
       </div>
     </div>

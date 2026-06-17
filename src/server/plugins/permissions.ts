@@ -189,7 +189,7 @@ export async function grantPluginPermission(
     throw new Error("Enter a valid SteamID before granting a permission.");
   }
 
-  if (!/^[a-z0-9_.:-]+$/.test(cleanPermission)) {
+  if (cleanPermission !== "*" && !/^[a-z0-9_.:-]+$/.test(cleanPermission)) {
     throw new Error("Permission names may only contain letters, numbers, dots, underscores, colons, and dashes.");
   }
 
@@ -232,10 +232,30 @@ export async function grantPluginPermission(
 
 function cleanPermission(permission: string) {
   const clean = permission.trim().toLowerCase();
-  if (!/^[a-z0-9_.:-]+$/.test(clean)) {
+  if (clean !== "*" && !/^[a-z0-9_.:-]+$/.test(clean)) {
     throw new Error("Permission names may only contain letters, numbers, dots, underscores, colons, and dashes.");
   }
   return clean;
+}
+
+// Grant one permission (or "*" for full access) to many players at once.
+export async function grantPluginPermissionsBulk(
+  server: ServerProfile,
+  targets: Array<{ steamId: string; playerName?: string | null }>,
+  permission: string,
+  framework?: string | null,
+) {
+  const granted: string[] = [];
+  const failed: Array<{ steamId: string; error: string }> = [];
+  for (const target of targets) {
+    try {
+      await grantPluginPermission(server, target.steamId, permission, framework, target.playerName, null);
+      granted.push(target.steamId);
+    } catch (error) {
+      failed.push({ steamId: target.steamId, error: error instanceof Error ? error.message : "grant failed" });
+    }
+  }
+  return { granted, failed };
 }
 
 function cleanSteamId(steamId: string) {
