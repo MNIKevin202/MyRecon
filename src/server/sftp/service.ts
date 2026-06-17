@@ -187,6 +187,45 @@ export async function makeDirectory(server: ServerProfile, requestedPath: string
   });
 }
 
+// Resolve the server's plugin directory the same way the install flow does:
+// explicit override → framework-based default under root → error.
+export function resolvePluginDir(server: ServerProfile) {
+  if (server.sftpDefaultPluginPath) {
+    return server.sftpDefaultPluginPath.replace(/\/$/, "");
+  }
+  if (server.sftpRootPath) {
+    const framework = (server.modFramework ?? "oxide") as "oxide" | "carbon";
+    const frameworkPath = framework === "carbon" ? "carbon/plugins" : "oxide/plugins";
+    return `${server.sftpRootPath.replace(/\/$/, "")}/${frameworkPath}`;
+  }
+  throw new Error("Server has no SFTP root path configured. Set it in Server Settings.");
+}
+
+// Download every .cs plugin file in the server's plugin directory over SFTP.
+// Returns the raw file contents so they can be zipped or copied as-is.
+export async function downloadPluginFiles(server: ServerProfile) {
+  const dir = resolvePluginDir(server);
+  return withSftp(server, "download-plugins", dir, async (client) => {
+    const entries = await client.list(dir);
+    const csFiles = entries.filter(
+      (e) => e.type !== "d" && e.name.toLowerCase().endsWith(".cs"),
+    );
+
+    const files: { name: string; data: Buffer }[] = [];
+    for (const entry of csFiles) {
+      const remotePath = joinRemotePath(dir, entry.name);
+      const data = await client.get(remotePath);
+      const buffer = Buffer.isBuffer(data)
+        ? data
+        : typeof data === "string"
+          ? Buffer.from(data, "utf8")
+          : await streamToBuffer(data as unknown as NodeJS.ReadableStream);
+      files.push({ name: entry.name, data: buffer });
+    }
+    return files;
+  });
+}
+
 async function streamToBuffer(stream: NodeJS.ReadableStream) {
   const chunks: Buffer[] = [];
   for await (const chunk of stream) {

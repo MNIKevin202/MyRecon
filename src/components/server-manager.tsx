@@ -443,7 +443,8 @@ export function ServerManager({ initialServers }: { initialServers: Server[] }) 
           </div>
           <p className="mb-5 text-sm text-slate-400">
             Copy every exclusive plugin installed on the source server to the target server via SFTP
-            (the target must have SFTP enabled), or download them as a ZIP to install yourself.
+            (the target must have SFTP enabled), or download <em>all</em> plugins on the source
+            server (MyRcon + uMod/Oxide) as a ZIP to install yourself.
           </p>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="From (source)">
@@ -470,11 +471,20 @@ export function ServerManager({ initialServers }: { initialServers: Server[] }) 
               <Copy className="h-4 w-4" />
               {copyBusy ? "Copying…" : "Copy Plugins"}
             </Button>
-            <Button variant="secondary" onClick={downloadZip} disabled={copyBusy || !copySource}>
+            <Button
+              variant="secondary"
+              onClick={downloadZip}
+              disabled={copyBusy || !copySource || !servers.find((s) => s.id === copySource)?.sftpEnabled}
+            >
               <Download className="h-4 w-4" />
               Download ZIP
             </Button>
           </div>
+          {copySource && !servers.find((s) => s.id === copySource)?.sftpEnabled && (
+            <p className="mt-2 text-xs text-amber-500/80">
+              Download needs SFTP enabled on the source server.
+            </p>
+          )}
           {copyLogs.length > 0 && (
             <pre className="mt-4 max-h-72 overflow-y-auto whitespace-pre-wrap rounded-md border border-white/10 bg-black/40 p-3 font-mono text-xs text-slate-300">
               {copyLogs.join("\n")}
