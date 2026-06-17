@@ -3,6 +3,7 @@ import { canManage, requireUser } from "@/lib/api";
 import { encryptSecret } from "@/lib/crypto";
 import { prisma } from "@/lib/prisma";
 import { serverProfileSchema } from "@/lib/validators";
+import { evictPooledConnection } from "@/server/rcon/service";
 
 type Params = { params: Promise<{ serverId: string }> };
 
@@ -46,6 +47,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       updatedAt: true,
     },
   });
+
+  // Evict any pooled connection so the next command reconnects with new settings
+  evictPooledConnection(server);
 
   return NextResponse.json({ server });
 }

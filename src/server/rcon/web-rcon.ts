@@ -33,6 +33,10 @@ export class WebRconClient {
 
   constructor(private options: RconConnectionOptions) {}
 
+  isConnected() {
+    return this.socket?.readyState === WebSocket.OPEN;
+  }
+
   async connect() {
     const attempts = buildWebRconAttempts(this.options);
     const errors: Error[] = [];

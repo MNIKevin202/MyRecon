@@ -127,6 +127,65 @@ function logRconSelection(server: ServerProfile, command: string, details: RconC
   );
 }
 
+// ── Persistent WebRCON connection pool ───────────────────────────────────────
+// Keeps one live WebSocket per server so we don't hammer Rust's rate limiter
+// by opening a new connection for every command.
+type PoolEntry = { client: WebRconClient; lastUsed: number };
+const _pool = new Map<string, PoolEntry>();
+const POOL_IDLE_MS = 5 * 60 * 1000; // drop idle connections after 5 minutes
+
+function poolKey(server: Pick<ServerProfile, "host" | "rconPort">) {
+  return `${server.host}:${server.rconPort}`;
+}
+
+async function getPooledClient(
+  server: ServerProfile,
+  passwordOverride?: string,
+  timeoutMs?: number,
+): Promise<WebRconClient> {
+  const key = poolKey(server);
+  const existing = _pool.get(key);
+  if (existing?.client.isConnected()) {
+    existing.lastUsed = Date.now();
+    return existing.client;
+  }
+
+  // Stale entry — remove it
+  if (existing) {
+    existing.client.close();
+    _pool.delete(key);
+  }
+
+  const client = new WebRconClient({
+    host: server.host,
+    port: server.rconPort,
+    password: getRconPassword(server, passwordOverride),
+    timeoutMs: timeoutMs ?? 8000,
+  });
+  await client.connect();
+  _pool.set(key, { client, lastUsed: Date.now() });
+  return client;
+}
+
+// Evict a specific server's pooled connection (call after password/host change)
+export function evictPooledConnection(server: Pick<ServerProfile, "host" | "rconPort">) {
+  const key = poolKey(server);
+  _pool.get(key)?.client.close();
+  _pool.delete(key);
+}
+
+// Evict connections that have been idle longer than POOL_IDLE_MS
+function evictIdleConnections() {
+  const now = Date.now();
+  for (const [key, entry] of _pool) {
+    if (now - entry.lastUsed > POOL_IDLE_MS || !entry.client.isConnected()) {
+      entry.client.close();
+      _pool.delete(key);
+    }
+  }
+}
+setInterval(evictIdleConnections, 60_000);
+
 function webClientFor(server: ServerProfile, onDebug?: (message: string) => void, passwordOverride?: string, timeoutMs?: number) {
   return new WebRconClient({
     host: server.host,
@@ -152,19 +211,36 @@ async function runServerCommand(
   protocol: Exclude<RconProtocol, "EXPERIMENTAL">,
   timeoutMs?: number,
 ) {
-  let client: WebRconClient | SourceRconClient;
-  try {
-    client = protocol === "WEBRCON"
-      ? webClientFor(server, undefined, undefined, timeoutMs)
-      : sourceClientFor(server, undefined, timeoutMs);
-  } catch (error) {
-    const details = buildRconErrorDetails(server, error);
-    throw Object.assign(new Error(details.message), { details });
+  if (protocol === "WEBRCON") {
+    // Use the persistent pool — avoids reconnecting for every command
+    let client: WebRconClient;
+    try {
+      client = await getPooledClient(server, undefined, timeoutMs);
+    } catch (error) {
+      // If pool connection fails, evict and rethrow
+      const key = poolKey(server);
+      _pool.get(key)?.client.close();
+      _pool.delete(key);
+      const details = buildRconErrorDetails(server, error);
+      throw Object.assign(new Error(details.message), { details });
+    }
+
+    try {
+      const result = await client.command(command);
+      return typeof result === "string" ? result : result.Message;
+    } catch (error) {
+      // If the pooled connection died mid-command, evict it so the next call reconnects
+      const key = poolKey(server);
+      _pool.get(key)?.client.close();
+      _pool.delete(key);
+      throw error;
+    }
   }
 
+  // Legacy (Source RCON) — short-lived connection as before
+  const client = sourceClientFor(server, undefined, timeoutMs);
   try {
-    const result = await client.command(command);
-    return typeof result === "string" ? result : result.Message;
+    return await client.command(command);
   } finally {
     client.close();
   }
