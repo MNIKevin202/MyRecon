@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Copy, Pencil, Plus, Power, Star, Trash2 } from "lucide-react";
+import { Check, Copy, Download, Pencil, Plus, Power, Star, Trash2 } from "lucide-react";
 import { Button, Field, Input, Panel, Select } from "@/components/ui";
 import { api, clsx } from "@/lib/utils";
 
@@ -87,6 +87,39 @@ export function ServerManager({ initialServers }: { initialServers: Server[] }) 
       );
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Copy failed");
+    } finally {
+      setCopyBusy(false);
+    }
+  }
+
+  async function downloadZip() {
+    if (!copySource) {
+      setMessage("Choose a source server to download its plugins.");
+      return;
+    }
+    setCopyBusy(true);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/servers/${copySource}/plugins-zip`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? `Download failed (${res.status})`);
+      }
+      const blob = await res.blob();
+      const disposition = res.headers.get("Content-Disposition") ?? "";
+      const match = disposition.match(/filename="([^"]+)"/);
+      const filename = match?.[1] ?? "myrcon-plugins.zip";
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setMessage(`Downloaded ${filename}.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Download failed");
     } finally {
       setCopyBusy(false);
     }
@@ -409,8 +442,8 @@ export function ServerManager({ initialServers }: { initialServers: Server[] }) 
             <h2 className="text-lg font-semibold">Copy Installed Plugins</h2>
           </div>
           <p className="mb-5 text-sm text-slate-400">
-            Copies every exclusive plugin installed on the source server to the target server via SFTP,
-            then reloads each one. The target server must have SFTP enabled.
+            Copy every exclusive plugin installed on the source server to the target server via SFTP
+            (the target must have SFTP enabled), or download them as a ZIP to install yourself.
           </p>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="From (source)">
@@ -432,10 +465,14 @@ export function ServerManager({ initialServers }: { initialServers: Server[] }) 
               </Select>
             </Field>
           </div>
-          <div className="mt-5">
+          <div className="mt-5 flex flex-wrap gap-3">
             <Button onClick={copyPlugins} disabled={copyBusy || !copySource || !copyTarget}>
               <Copy className="h-4 w-4" />
               {copyBusy ? "Copying…" : "Copy Plugins"}
+            </Button>
+            <Button variant="secondary" onClick={downloadZip} disabled={copyBusy || !copySource}>
+              <Download className="h-4 w-4" />
+              Download ZIP
             </Button>
           </div>
           {copyLogs.length > 0 && (
