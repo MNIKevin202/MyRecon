@@ -34,6 +34,7 @@ export const chatMessageSchema = z.object({
 export const sftpSettingsSchema = z.object({
   modFramework: z.enum(["oxide", "carbon"]).default("oxide"),
   sftpEnabled: z.coerce.boolean().default(false),
+  sftpProtocol: z.enum(["SFTP", "FTP"]).default("SFTP"),
   sftpHost: z.string().trim().max(255).optional().nullable(),
   sftpPort: z.coerce.number().int().min(1).max(65535).default(22),
   sftpUsername: z.string().trim().max(255).optional().nullable(),

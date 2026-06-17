@@ -14,6 +14,7 @@ type Server = {
   rconType: string;
   modFramework: string;
   sftpEnabled: boolean;
+  sftpProtocol: string;
   sftpHost: string | null;
   sftpPort: number;
   sftpUsername: string | null;
@@ -35,6 +36,7 @@ const blank = {
   notes: "",
   modFramework: "oxide",
   sftpEnabled: false,
+  sftpProtocol: "SFTP",
   sftpHost: "",
   sftpPort: 22,
   sftpUsername: "",
@@ -141,6 +143,7 @@ export function ServerManager({ initialServers }: { initialServers: Server[] }) 
       notes: server.notes ?? "",
       modFramework: server.modFramework ?? "oxide",
       sftpEnabled: server.sftpEnabled,
+      sftpProtocol: server.sftpProtocol ?? "SFTP",
       sftpHost: server.sftpHost ?? "",
       sftpPort: server.sftpPort,
       sftpUsername: server.sftpUsername ?? "",
@@ -232,6 +235,7 @@ export function ServerManager({ initialServers }: { initialServers: Server[] }) 
       const payload = {
         modFramework: form.modFramework,
         sftpEnabled: forceEnabled ? true : form.sftpEnabled,
+        sftpProtocol: form.sftpProtocol,
         sftpHost: form.sftpHost,
         sftpPort: form.sftpPort,
         sftpUsername: form.sftpUsername,
@@ -385,22 +389,37 @@ export function ServerManager({ initialServers }: { initialServers: Server[] }) 
           </Panel>
 
           <Panel>
-            <h2 className="text-lg font-semibold text-white">SFTP</h2>
+            <h2 className="text-lg font-semibold text-white">File Access (SFTP / FTP)</h2>
             <p className="mt-1 text-sm text-slate-400">Credentials are encrypted and never returned after saving.</p>
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <label className="flex items-center gap-2 text-sm text-slate-300">
                 <input type="checkbox" checked={form.sftpEnabled} onChange={(event) => update("sftpEnabled", event.target.checked)} />
-                Enable SFTP
+                Enable file access
               </label>
               <label className="flex items-center gap-2 text-sm text-slate-300">
                 <input type="checkbox" checked={!form.sftpAllowOutsideRoot} onChange={(event) => update("sftpAllowOutsideRoot", !event.target.checked)} />
                 Lock browsing to root path
               </label>
-              <Field label="SFTP host">
-                <Input value={form.sftpHost} onChange={(event) => update("sftpHost", event.target.value)} placeholder="147.189.174.244" />
+              <Field label="Protocol" hint="Use FTP for hosts that don't offer SFTP (e.g. HostHavoc).">
+                <Select
+                  value={form.sftpProtocol}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    update("sftpProtocol", next);
+                    // Switch to the protocol's standard port if still on the other default
+                    if (next === "FTP" && form.sftpPort === 22) update("sftpPort", 21);
+                    if (next === "SFTP" && form.sftpPort === 21) update("sftpPort", 22);
+                  }}
+                >
+                  <option value="SFTP">SFTP (SSH)</option>
+                  <option value="FTP">FTP</option>
+                </Select>
               </Field>
-              <Field label="SFTP port">
+              <Field label="Port">
                 <Input type="number" value={form.sftpPort} onChange={(event) => update("sftpPort", Number(event.target.value))} />
+              </Field>
+              <Field label="Host">
+                <Input value={form.sftpHost} onChange={(event) => update("sftpHost", event.target.value)} placeholder="147.189.174.244" />
               </Field>
               <Field label="Username">
                 <Input value={form.sftpUsername} onChange={(event) => update("sftpUsername", event.target.value)} />
@@ -408,9 +427,11 @@ export function ServerManager({ initialServers }: { initialServers: Server[] }) 
               <Field label="Password" hint="Leave blank to keep the saved password.">
                 <Input type="password" value={form.sftpPassword} onChange={(event) => update("sftpPassword", event.target.value)} />
               </Field>
-              <Field label="Private key" hint="Optional. Leave blank to keep the saved key.">
-                <textarea className="min-h-24 rounded-md border border-white/10 bg-white/[0.04] p-3 text-sm text-slate-100 outline-none focus:border-orange-400" value={form.sftpPrivateKey} onChange={(event) => update("sftpPrivateKey", event.target.value)} />
-              </Field>
+              {form.sftpProtocol !== "FTP" && (
+                <Field label="Private key" hint="Optional. Leave blank to keep the saved key.">
+                  <textarea className="min-h-24 rounded-md border border-white/10 bg-white/[0.04] p-3 text-sm text-slate-100 outline-none focus:border-orange-400" value={form.sftpPrivateKey} onChange={(event) => update("sftpPrivateKey", event.target.value)} />
+                </Field>
+              )}
               <Field label="Mod framework" hint="Determines the default plugin install path when no override is set.">
                 <Select value={form.modFramework} onChange={(event) => update("modFramework", event.target.value)}>
                   <option value="oxide">Oxide</option>

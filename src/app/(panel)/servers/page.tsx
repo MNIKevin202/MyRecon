@@ -15,6 +15,7 @@ export default async function ServersPage() {
       rconType: true,
       modFramework: true,
       sftpEnabled: true,
+      sftpProtocol: true,
       sftpHost: true,
       sftpPort: true,
       sftpUsername: true,

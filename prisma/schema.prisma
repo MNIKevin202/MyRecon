@@ -46,6 +46,7 @@ model ServerProfile {
   rconType              String           @default("WEBRCON")
   encryptedRconPassword String
   sftpEnabled           Boolean          @default(false)
+  sftpProtocol          String           @default("SFTP")
   sftpHost              String?
   sftpPort              Int              @default(22)
   sftpUsername          String?

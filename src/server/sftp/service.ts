@@ -1,9 +1,8 @@
 import path from "node:path";
-import SftpClient from "ssh2-sftp-client";
 import type { ServerProfile } from "@prisma/client";
-import { decryptSecret } from "@/lib/crypto";
 import { prisma } from "@/lib/prisma";
 import { buildSftpErrorDetails } from "@/server/sftp/errors";
+import { connectRemoteFs, type RemoteFs } from "@/server/sftp/transport";
 
 const TEXT_EXTENSIONS = new Set([".json", ".cfg", ".txt", ".log", ".cs", ".toml", ".yaml", ".yml"]);
 const MAX_EDIT_BYTES = 2 * 1024 * 1024;
@@ -68,36 +67,24 @@ export function isEditableTextFile(filePath: string) {
 }
 
 export async function getSftpClient(server: ServerProfile) {
-  if (!server.sftpEnabled) throw new Error("SFTP is not enabled for this server profile.");
-  if (!server.sftpHost || !server.sftpUsername) throw new Error("SFTP host and username are required.");
-
-  const client = new SftpClient();
-  await client.connect({
-    host: server.sftpHost,
-    port: server.sftpPort,
-    username: server.sftpUsername,
-    password: server.sftpPasswordEncrypted ? decryptSecret(server.sftpPasswordEncrypted) : undefined,
-    privateKey: server.sftpPrivateKeyEncrypted ? decryptSecret(server.sftpPrivateKeyEncrypted) : undefined,
-    readyTimeout: 12000,
-  });
-  return client;
+  return connectRemoteFs(server);
 }
 
 export async function withSftp<T>(
   server: ServerProfile,
   operation: string,
   requestedPath: string | undefined,
-  fn: (client: SftpClient) => Promise<T>,
+  fn: (client: RemoteFs) => Promise<T>,
 ) {
-  const client = await getSftpClient(server);
+  const client = await connectRemoteFs(server);
   try {
     return await fn(client);
   } catch (error) {
-    throw Object.assign(new Error(error instanceof Error ? error.message : "SFTP operation failed"), {
+    throw Object.assign(new Error(error instanceof Error ? error.message : "File transfer operation failed"), {
       details: buildSftpErrorDetails(server, operation, requestedPath, error),
     });
   } finally {
-    await client.end().catch(() => undefined);
+    await client.end();
   }
 }
 
@@ -127,12 +114,7 @@ export async function readTextFile(server: ServerProfile, requestedPath: string)
     if (stat.size > MAX_EDIT_BYTES) {
       return { path: remotePath, tooLarge: true, size: stat.size, content: "" };
     }
-    const data = await client.get(remotePath);
-    const buffer = Buffer.isBuffer(data)
-      ? data
-      : typeof data === "string"
-        ? Buffer.from(data, "utf8")
-        : await streamToBuffer(data as unknown as NodeJS.ReadableStream);
+    const buffer = await client.getBuffer(remotePath);
     return { path: remotePath, tooLarge: false, size: stat.size, content: buffer.toString("utf8") };
   });
 }
@@ -141,7 +123,7 @@ export async function writeTextFile(server: ServerProfile, requestedPath: string
   const remotePath = resolveRemotePath(server, requestedPath);
   if (!isEditableTextFile(remotePath)) throw new Error("This file type is not editable in the browser.");
   return withSftp(server, "write", remotePath, async (client) => {
-    await client.put(Buffer.from(content, "utf8"), remotePath);
+    await client.putBuffer(Buffer.from(content, "utf8"), remotePath);
     return { path: remotePath, ok: true };
   });
 }
@@ -155,7 +137,7 @@ export async function uploadFile(server: ServerProfile, requestedPath: string, f
 export async function uploadBuffer(server: ServerProfile, requestedPath: string, bytes: Buffer) {
   const remotePath = resolveRemotePath(server, requestedPath);
   return withSftp(server, "upload", remotePath, async (client) => {
-    await client.put(bytes, remotePath);
+    await client.putBuffer(bytes, remotePath);
     return { path: remotePath, ok: true };
   });
 }
@@ -164,7 +146,7 @@ export async function deleteRemotePath(server: ServerProfile, requestedPath: str
   const remotePath = resolveRemotePath(server, requestedPath);
   return withSftp(server, "delete", remotePath, async (client) => {
     const stat = await client.stat(remotePath);
-    if (stat.isDirectory) await client.rmdir(remotePath, true);
+    if (stat.isDirectory) await client.rmdir(remotePath);
     else await client.delete(remotePath);
     return { ok: true };
   });
@@ -182,7 +164,7 @@ export async function renameRemotePath(server: ServerProfile, oldPath: string, n
 export async function makeDirectory(server: ServerProfile, requestedPath: string) {
   const remotePath = resolveRemotePath(server, requestedPath);
   return withSftp(server, "mkdir", remotePath, async (client) => {
-    await client.mkdir(remotePath, true);
+    await client.mkdir(remotePath);
     return { ok: true, path: remotePath };
   });
 }
@@ -214,24 +196,10 @@ export async function downloadPluginFiles(server: ServerProfile) {
     const files: { name: string; data: Buffer }[] = [];
     for (const entry of csFiles) {
       const remotePath = joinRemotePath(dir, entry.name);
-      const data = await client.get(remotePath);
-      const buffer = Buffer.isBuffer(data)
-        ? data
-        : typeof data === "string"
-          ? Buffer.from(data, "utf8")
-          : await streamToBuffer(data as unknown as NodeJS.ReadableStream);
-      files.push({ name: entry.name, data: buffer });
+      files.push({ name: entry.name, data: await client.getBuffer(remotePath) });
     }
     return files;
   });
-}
-
-async function streamToBuffer(stream: NodeJS.ReadableStream) {
-  const chunks: Buffer[] = [];
-  for await (const chunk of stream) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-  }
-  return Buffer.concat(chunks);
 }
 
 export async function testSftpConnection(server: ServerProfile) {

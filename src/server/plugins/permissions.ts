@@ -342,9 +342,8 @@ async function readJsonFile<T>(server: ServerProfile, dir: string, name: string)
   return withSftp(server, "perm-export", dir, async (client) => {
     const remotePath = joinRemotePath(dir, name);
     try {
-      const data = await client.get(remotePath);
-      const text = Buffer.isBuffer(data) ? data.toString("utf8") : String(data);
-      return JSON.parse(text) as T;
+      const data = await client.getBuffer(remotePath);
+      return JSON.parse(data.toString("utf8")) as T;
     } catch {
       return null;
     }

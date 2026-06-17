@@ -25,6 +25,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     data: {
       modFramework: input.modFramework,
       sftpEnabled: input.sftpEnabled,
+      sftpProtocol: input.sftpProtocol,
       sftpHost: input.sftpHost || null,
       sftpPort: input.sftpPort,
       sftpUsername: input.sftpUsername || null,
@@ -39,6 +40,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       id: true,
       modFramework: true,
       sftpEnabled: true,
+      sftpProtocol: true,
       sftpHost: true,
       sftpPort: true,
       sftpUsername: true,
