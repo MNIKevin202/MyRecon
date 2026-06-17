@@ -1,2 +1,2 @@
-export const APP_VERSION = "0.1.52";
-export const BUILD_STAMP = "2026-06-16-plugin-updates-tab";
+export const APP_VERSION = "0.1.53";
+export const BUILD_STAMP = "2026-06-17-rcon-connection-pool";
