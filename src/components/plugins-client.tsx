@@ -174,6 +174,14 @@ export function PluginsClient({ servers, initialPlugins }: { servers: Server[]; 
   const [notice, setNotice] = useState<string | null>(null);
   const autoLoadedInstalled = useRef(new Set<string>());
 
+  // Installed-plugin multi-select + bulk Grant Access modal
+  const [selectedInstalled, setSelectedInstalled] = useState<Set<string>>(new Set());
+  const [showGrantModal, setShowGrantModal] = useState(false);
+  const [grantPlayers, setGrantPlayers] = useState<Set<string>>(new Set());
+  const [grantModalSearch, setGrantModalSearch] = useState("");
+  const [grantManualId, setGrantManualId] = useState("");
+  const [grantManualName, setGrantManualName] = useState("");
+
   const selected = useMemo(() => serverProfiles.find((server) => server.id === serverId), [serverId, serverProfiles]);
   const fallbackPath = selected?.sftpDefaultPluginPath || selected?.sftpRootPath || "";
   const targetPath = pluginDirectory.trim() || fallbackPath;
@@ -566,6 +574,123 @@ export function PluginsClient({ servers, initialPlugins }: { servers: Server[]; 
     }
   }
 
+  function toggleInstalled(path: string) {
+    setSelectedInstalled((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  }
+
+  async function uninstallSelected() {
+    const paths = [...selectedInstalled];
+    if (!serverId || paths.length === 0) return;
+    if (!window.confirm(`Delete ${paths.length} plugin file(s) from the server? This cannot be undone.`)) return;
+
+    setBusy("uninstall-selected");
+    setNotice(`Uninstalling ${paths.length} plugin(s)...`);
+    let failed = 0;
+    try {
+      for (const path of paths) {
+        try {
+          await api(`/api/servers/${serverId}/sftp/delete`, { method: "POST", body: JSON.stringify({ path }) });
+        } catch {
+          failed++;
+        }
+      }
+      setNotice(`Uninstalled ${paths.length - failed} plugin(s)${failed ? `, ${failed} failed` : ""}.`);
+      setSelectedInstalled(new Set());
+      await loadInstalled();
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function openGrantModal() {
+    if (selectedInstalled.size === 0) {
+      setNotice("Select one or more plugins first.");
+      return;
+    }
+    if (knownPlayers.length === 0) void loadKnownPlayers();
+    setGrantPlayers(new Set());
+    setGrantManualId("");
+    setGrantManualName("");
+    setGrantModalSearch("");
+    setShowGrantModal(true);
+  }
+
+  // Grant either each selected plugin's permissions, or full access ("*"),
+  // to the players chosen in the modal.
+  async function modalGrant(fullAccess: boolean) {
+    const ids = [...grantPlayers];
+    const manual = grantManualId.trim();
+    if (manual && /^\d{15,20}$/.test(manual) && !ids.includes(manual)) ids.push(manual);
+    if (!serverId || ids.length === 0) {
+      setNotice("Pick at least one player or enter a SteamID.");
+      return;
+    }
+
+    const named = knownPlayers
+      .filter((p) => ids.includes(p.steamId))
+      .map((p) => ({ steamId: p.steamId, name: p.name }));
+    if (manual && grantManualName.trim()) named.push({ steamId: manual, name: grantManualName.trim() });
+
+    setBusy("modal-grant");
+    try {
+      let permissions: string[];
+      if (fullAccess) {
+        permissions = ["*"];
+      } else {
+        // Resolve each selected plugin's real permissions via analysis,
+        // falling back to a derived "<slug>.use" node when none are found.
+        setNotice("Reading selected plugins for their permissions...");
+        const perms = new Set<string>();
+        for (const path of selectedInstalled) {
+          const plugin = installedPlugins.find((p) => p.path === path);
+          if (!plugin) continue;
+          try {
+            const data = await api<{ analysis: PluginAnalysis }>(`/api/servers/${serverId}/plugins/analyze`, {
+              method: "POST",
+              body: JSON.stringify({ path }),
+            });
+            if (data.analysis.permissions.length > 0) {
+              for (const perm of data.analysis.permissions) perms.add(perm);
+            } else {
+              perms.add(`${permissionSlug(plugin.name)}.use`);
+            }
+          } catch {
+            perms.add(`${permissionSlug(plugin.name)}.use`);
+          }
+        }
+        permissions = [...perms];
+      }
+
+      if (permissions.length === 0) {
+        setNotice("No permissions found for the selected plugins.");
+        return;
+      }
+
+      setNotice(`Granting ${fullAccess ? "full access" : `${permissions.length} permission(s)`} to ${ids.length} player(s)...`);
+      let failures = 0;
+      for (const permission of permissions) {
+        const data = await api<{ granted: string[]; failed: Array<{ steamId: string }> }>(
+          `/api/servers/${serverId}/permissions/grant-bulk`,
+          { method: "POST", body: JSON.stringify({ steamIds: ids, permission, framework: permissionFramework, players: named }) },
+        );
+        failures += data.failed.length;
+      }
+      setNotice(
+        `Granted ${fullAccess ? 'full access ("*")' : `${permissions.length} permission(s)`} to ${ids.length} player(s)${failures ? `, ${failures} failed` : ""}.`,
+      );
+      setShowGrantModal(false);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Grant failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   function renderSetupTab() {
     return (
       <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
@@ -828,35 +953,148 @@ export function PluginsClient({ servers, initialPlugins }: { servers: Server[]; 
           ) : null}
         </Panel>
 
+        {installedPlugins.length > 0 ? (
+          <Panel className="flex flex-wrap items-center gap-2 py-3">
+            <span className="text-sm text-slate-300">{selectedInstalled.size} selected</span>
+            <Button variant="secondary" onClick={() => setSelectedInstalled(new Set(installedPlugins.map((p) => p.path)))}>
+              Select all
+            </Button>
+            <Button variant="secondary" onClick={() => setSelectedInstalled(new Set())} disabled={selectedInstalled.size === 0}>
+              Clear
+            </Button>
+            <div className="ml-auto flex flex-wrap gap-2">
+              <Button onClick={openGrantModal} disabled={selectedInstalled.size === 0}>
+                <ShieldCheck className="h-4 w-4" />Grant Access ({selectedInstalled.size})
+              </Button>
+              <Button
+                variant="danger"
+                onClick={uninstallSelected}
+                disabled={busy === "uninstall-selected" || selectedInstalled.size === 0 || !selected?.sftpEnabled}
+              >
+                <UserMinus className="h-4 w-4" />Uninstall Selected ({selectedInstalled.size})
+              </Button>
+            </div>
+          </Panel>
+        ) : null}
+
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {installedPlugins.length === 0 ? (
             <Panel>
               <p className="text-sm text-slate-500">No installed plugins loaded.</p>
             </Panel>
           ) : null}
-          {installedPlugins.map((plugin) => (
-            <Panel key={plugin.path} className="p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="break-all font-mono text-sm text-slate-100">{plugin.name}</div>
-                  <div className="mt-1 text-xs text-slate-500">{Math.round(plugin.size / 1024)} KB</div>
+          {installedPlugins.map((plugin) => {
+            const checked = selectedInstalled.has(plugin.path);
+            return (
+              <Panel key={plugin.path} className={clsx("p-4", checked && "ring-1 ring-orange-500/50")}>
+                <div className="flex items-start gap-3">
+                  <input type="checkbox" className="mt-1" checked={checked} onChange={() => toggleInstalled(plugin.path)} />
+                  <div className="min-w-0 flex-1">
+                    <div className="break-all font-mono text-sm text-slate-100">{plugin.name}</div>
+                    <div className="mt-1 text-xs text-slate-500">{Math.round(plugin.size / 1024)} KB</div>
+                  </div>
+                  <PlugZap className="h-5 w-5 text-orange-300" />
                 </div>
-                <PlugZap className="h-5 w-5 text-orange-300" />
-              </div>
-              <Button
-                className="mt-4 w-full"
-                variant="secondary"
-                onClick={() => openManage({
-                  name: plugin.name.replace(/\.cs$/i, ""),
-                  fileName: plugin.name,
-                  path: plugin.path,
-                  size: plugin.size,
-                })}
-              >
-                <SlidersHorizontal className="h-4 w-4" />Manage
-              </Button>
-            </Panel>
-          ))}
+                <Button
+                  className="mt-4 w-full"
+                  variant="secondary"
+                  onClick={() => openManage({
+                    name: plugin.name.replace(/\.cs$/i, ""),
+                    fileName: plugin.name,
+                    path: plugin.path,
+                    size: plugin.size,
+                  })}
+                >
+                  <SlidersHorizontal className="h-4 w-4" />Manage
+                </Button>
+              </Panel>
+            );
+          })}
+        </div>
+
+        {showGrantModal ? renderGrantModal() : null}
+      </div>
+    );
+  }
+
+  function renderGrantModal() {
+    const modalPlayers = (() => {
+      const q = grantModalSearch.trim().toLowerCase();
+      if (!q) return knownPlayers;
+      return knownPlayers.filter((p) => `${p.name} ${p.steamId}`.toLowerCase().includes(q));
+    })();
+    const selectedPluginNames = installedPlugins
+      .filter((p) => selectedInstalled.has(p.path))
+      .map((p) => p.name);
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setShowGrantModal(false)}>
+        <div className="w-full max-w-lg rounded-xl border border-white/10 bg-[#0d1117] p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-white">Grant Access</h2>
+            <button onClick={() => setShowGrantModal(false)} className="text-slate-400 hover:text-white">✕</button>
+          </div>
+          <p className="mt-1 text-sm text-slate-400">
+            Grant {selectedPluginNames.length} selected plugin{selectedPluginNames.length === 1 ? "" : "s"}&apos; permissions, or full access, to the chosen players.
+          </p>
+
+          <div className="mt-4 grid gap-3">
+            <Field label="System">
+              <Select value={permissionFramework} onChange={(e) => setPermissionFramework(e.target.value as PermissionFramework)}>
+                <option value="CARBON">Carbon</option>
+                <option value="OXIDE">Oxide/uMod</option>
+                <option value="AUTO">Auto</option>
+              </Select>
+            </Field>
+            <Field label="Search players">
+              <Input value={grantModalSearch} onChange={(e) => setGrantModalSearch(e.target.value)} placeholder="Name or SteamID" />
+            </Field>
+            <div className="max-h-48 overflow-y-auto rounded-md border border-white/10 bg-black/20">
+              {modalPlayers.length === 0 ? (
+                <p className="p-3 text-sm text-slate-500">No players loaded. Use “Load Players” on the Installed tab.</p>
+              ) : (
+                modalPlayers.map((player) => (
+                  <label key={player.steamId} className="flex cursor-pointer items-center gap-3 border-b border-white/5 px-3 py-2 text-sm last:border-b-0 hover:bg-white/[0.04]">
+                    <input
+                      type="checkbox"
+                      checked={grantPlayers.has(player.steamId)}
+                      onChange={() =>
+                        setGrantPlayers((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(player.steamId)) next.delete(player.steamId);
+                          else next.add(player.steamId);
+                          return next;
+                        })
+                      }
+                    />
+                    <span className="min-w-0 flex-1 truncate text-slate-200">
+                      {player.name || "Unnamed"}
+                      {player.connected ? <span className="ml-2 text-xs text-emerald-400">online</span> : null}
+                    </span>
+                    <span className="font-mono text-xs text-slate-500">{player.steamId}</span>
+                  </label>
+                ))
+              )}
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Add by SteamID">
+                <Input value={grantManualId} onChange={(e) => setGrantManualId(e.target.value.replace(/\D/g, "").slice(0, 20))} placeholder="7656…" className="font-mono" />
+              </Field>
+              <Field label="Display name">
+                <Input value={grantManualName} onChange={(e) => setGrantManualName(e.target.value)} placeholder="Optional" />
+              </Field>
+            </div>
+          </div>
+
+          <div className="mt-5 flex flex-wrap justify-end gap-2">
+            <Button variant="secondary" onClick={() => setShowGrantModal(false)}>Cancel</Button>
+            <Button onClick={() => modalGrant(false)} disabled={busy === "modal-grant"}>
+              <ShieldCheck className="h-4 w-4" />Grant Plugin Access
+            </Button>
+            <Button variant="secondary" onClick={() => modalGrant(true)} disabled={busy === "modal-grant"}>
+              <KeyRound className="h-4 w-4" />Grant Full Access
+            </Button>
+          </div>
         </div>
       </div>
     );
