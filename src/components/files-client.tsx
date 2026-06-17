@@ -309,7 +309,7 @@ export function FilesClient({ servers }: { servers: Server[] }) {
       <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Files</h1>
-          <p className="mt-1 text-sm text-slate-400">Manage Rust server files over SFTP.</p>
+          <p className="mt-1 text-sm text-slate-400">Manage Rust server files over SFTP or FTP.</p>
         </div>
         <div className="flex flex-wrap gap-3">
           <Select value={serverId} onChange={(e) => setServerId(e.target.value)} className="min-w-56">

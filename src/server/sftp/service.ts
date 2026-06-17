@@ -211,7 +211,7 @@ export async function testSftpConnection(server: ServerProfile) {
         serverId: server.id,
         source: "sftp",
         level: "info",
-        message: `SFTP connection test succeeded for ${server.sftpHost}:${server.sftpPort}`,
+        message: `${server.sftpProtocol ?? "SFTP"} connection test succeeded for ${server.sftpHost}:${server.sftpPort}`,
       },
     });
     return { ok: true, path: root };

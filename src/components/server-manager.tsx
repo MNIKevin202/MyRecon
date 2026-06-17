@@ -449,8 +449,8 @@ export function ServerManager({ initialServers }: { initialServers: Server[] }) 
               </Field>
             </div>
             <div className="mt-5 flex flex-wrap gap-3">
-              <Button onClick={() => saveSftp()} disabled={busy}>Save SFTP</Button>
-              <Button variant="secondary" onClick={testSftp} disabled={busy}>Test SFTP Connection</Button>
+              <Button onClick={() => saveSftp()} disabled={busy}>Save File Access</Button>
+              <Button variant="secondary" onClick={testSftp} disabled={busy}>Test Connection</Button>
             </div>
           </Panel>
         </div>
