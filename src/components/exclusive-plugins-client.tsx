@@ -610,6 +610,28 @@ export function ExclusivePluginsClient({
   const [localVersions, setLocalVersions] = useState<Record<string, Record<string, string>>>({});
   const [localUninstalled, setLocalUninstalled] = useState<Record<string, Set<string>>>({});
 
+  // Real install state, read from each server over SFTP/FTP — authoritative,
+  // so status is correct regardless of which machine the app runs on.
+  const [realInstalled, setRealInstalled] = useState<Record<string, Record<string, string>>>({});
+  const [checkedServers, setCheckedServers] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      for (const srv of servers) {
+        if (!srv.sftpEnabled) continue;
+        try {
+          const res = await fetch(`/api/exclusive-plugins/installed?serverId=${srv.id}`);
+          if (!res.ok) continue;
+          const data = (await res.json()) as { installed?: Record<string, string> };
+          if (cancelled) return;
+          setRealInstalled((prev) => ({ ...prev, [srv.id]: data.installed ?? {} }));
+          setCheckedServers((prev) => new Set(prev).add(srv.id));
+        } catch { /* server unreachable — keep local record */ }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [servers]);
+
   // Poll manifest every 60s and surface new versions to cards without a page reload
   const [latestVersions, setLatestVersions] = useState<Record<string, string>>({});
   useEffect(() => {
@@ -662,8 +684,16 @@ export function ExclusivePluginsClient({
   // Build merged install map for all plugins
   function mergedVersions(pluginId: string) {
     const base    = installedOn[pluginId] ?? {};
+    const merged: Record<string, string> = { ...base };
+    // Servers we've actually checked are authoritative: set or clear per real state
+    for (const sid of checkedServers) {
+      const real = realInstalled[sid]?.[pluginId];
+      if (real) merged[sid] = real;
+      else delete merged[sid];
+    }
+    // Optimistic local overrides (just installed/uninstalled this session)
+    Object.assign(merged, localVersions[pluginId] ?? {});
     const removed = localUninstalled[pluginId] ?? new Set<string>();
-    const merged  = { ...base, ...(localVersions[pluginId] ?? {}) };
     for (const sid of removed) delete merged[sid];
     return merged;
   }
