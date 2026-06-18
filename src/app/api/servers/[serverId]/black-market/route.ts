@@ -54,6 +54,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     case "removeitem":  command = `bm.removeitem ${s(b.market)} ${s(b.item)}`; break;
     case "setcurrency": command = `bm.setcurrency ${s(b.market)} ${s(b.shortname)} ${s(b.name)}`.trim(); break;
     case "setnpc":      command = `bm.setnpc ${s(b.market)} ${b.showName ? "1" : "0"} ${s(b.name)}`.trim(); break;
+    case "setsign":     command = `bm.setsign ${s(b.market)} ${b.sign ? "1" : "0"} ${s(b.text)}`.trim(); break;
     case "placenpc":    command = `bm.placenpc ${s(b.x)} ${s(b.y)} ${s(b.z)} ${s(b.yaw ?? "0")}`.trim(); break;
     case "removenpc":   command = `bm.removenpc ${s(b.market)}`; break;
     case "clone":       command = `bm.clone ${s(b.src)} ${s(b.dst)}`; break;

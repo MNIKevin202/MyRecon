@@ -8,18 +8,20 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("MyRconBlackMarket", "MyRcon", "1.2.2")]
+    [Info("MyRconBlackMarket", "MyRcon", "1.3.0")]
     [Description("Per-NPC Black Market shops with cloning, analytics, and buyer tracking.")]
     public class MyRconBlackMarket : RustPlugin
     {
         const string PermAdmin = "myrconblackmarket.admin";
         const string PermUse   = "myrconblackmarket.use";
-        const string NpcPrefab = "assets/prefabs/npc/bandit/shopkeepers/bandit_shopkeeper.prefab";
-        const string UiName    = "MyRconBlackMarket_UI";
+        const string NpcPrefab  = "assets/prefabs/npc/bandit/shopkeepers/bandit_shopkeeper.prefab";
+        const string SignPrefab = "assets/prefabs/deployable/signs/sign.post.single.prefab";
+        const string UiName     = "MyRconBlackMarket_UI";
 
         PluginConfig _cfg;
         SavedData    _data;
-        readonly List<BaseEntity> _npcs = new List<BaseEntity>(); // parallel to _data.Markets
+        readonly List<BaseEntity> _npcs  = new List<BaseEntity>(); // parallel to _data.Markets
+        readonly List<BaseEntity> _signs = new List<BaseEntity>(); // spawned signs (cleanup only)
 
         // ── Models ────────────────────────────────────────────────────────────────
         class ShopItem
@@ -35,6 +37,8 @@ namespace Oxide.Plugins
             public float  X, Y, Z, Yaw;
             public string Name              = "";
             public bool   ShowName          = false;
+            public bool   Sign              = false;
+            public string SignText          = "";
             public string CurrencyShortname = "scrap";
             public string CurrencyName      = "Scrap";
             public List<ShopItem> Items     = new List<ShopItem>();
@@ -130,15 +134,30 @@ namespace Oxide.Plugins
         void EnsureSpawned()
         {
             if (_npcs.Count > 0) return; // already spawned this load
+            SpawnAll();
+        }
+
+        void SpawnAll()
+        {
             foreach (var m in _data.Markets)
-                SpawnNpc(new Vector3(m.X, m.Y, m.Z), Quaternion.Euler(0f, m.Yaw, 0f));
+            {
+                var rot = Quaternion.Euler(0f, m.Yaw, 0f);
+                SpawnNpc(new Vector3(m.X, m.Y, m.Z), rot);
+                if (m.Sign) SpawnSign(m, rot);
+            }
+        }
+
+        void KillAll()
+        {
+            foreach (var e in _npcs.ToList())  if (e != null && !e.IsDestroyed) e.Kill();
+            foreach (var e in _signs.ToList()) if (e != null && !e.IsDestroyed) e.Kill();
+            _npcs.Clear();
+            _signs.Clear();
         }
 
         void Unload()
         {
-            foreach (var ent in _npcs.ToList())
-                if (ent != null && !ent.IsDestroyed) ent.Kill();
-            _npcs.Clear();
+            KillAll();
             foreach (var p in BasePlayer.activePlayerList) CuiHelper.DestroyUi(p, UiName);
         }
 
@@ -151,13 +170,59 @@ namespace Oxide.Plugins
             _npcs.Add(ent);
         }
 
+        void SpawnSign(Market m, Quaternion rot)
+        {
+            // Place the sign just beside the NPC, raised to eye height, facing the same way.
+            Vector3 offset = rot * new Vector3(1.0f, 1.1f, 0f);
+            var sign = GameManager.server.CreateEntity(SignPrefab, new Vector3(m.X, m.Y, m.Z) + offset, rot) as Signage;
+            if (sign == null) { PrintWarning("Failed to create Black Market sign (prefab missing?)."); return; }
+            sign.enableSaving = false;
+            sign.Spawn();
+            _signs.Add(sign);
+            if (!string.IsNullOrEmpty(m.SignText)) ApplySignText(sign, m.SignText);
+        }
+
+        void ApplySignText(Signage sign, string text)
+        {
+            byte[] png;
+            try { png = RenderTextPng(text, 256, 128); }
+            catch (Exception e) { PrintWarning("Sign text could not be rendered on this server: " + e.Message); return; }
+            if (png == null) return;
+            try
+            {
+                if (sign.textureIDs != null)
+                    for (int i = 0; i < sign.textureIDs.Length; i++)
+                        if (sign.textureIDs[i] != 0) { FileStorage.server.Remove(sign.textureIDs[i], FileStorage.Type.png, sign.net.ID); sign.textureIDs[i] = 0; }
+                uint id = FileStorage.server.Store(png, FileStorage.Type.png, sign.net.ID);
+                if (sign.textureIDs == null || sign.textureIDs.Length == 0) sign.textureIDs = new uint[1];
+                sign.textureIDs[0] = id;
+                sign.SetFlag(BaseEntity.Flags.Locked, true);
+                sign.SendNetworkUpdate();
+            }
+            catch (Exception e) { PrintWarning("Failed to apply sign texture: " + e.Message); }
+        }
+
+        byte[] RenderTextPng(string text, int w, int h)
+        {
+            using (var bmp = new System.Drawing.Bitmap(w, h))
+            using (var g = System.Drawing.Graphics.FromImage(bmp))
+            {
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                g.Clear(System.Drawing.Color.FromArgb(18, 20, 18));
+                using (var font = new System.Drawing.Font("Arial", 26, System.Drawing.FontStyle.Bold))
+                using (var brush = new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(140, 210, 90)))
+                using (var sf = new System.Drawing.StringFormat { Alignment = System.Drawing.StringAlignment.Center, LineAlignment = System.Drawing.StringAlignment.Center })
+                {
+                    g.DrawString(text, font, brush, new System.Drawing.RectangleF(4, 4, w - 8, h - 8), sf);
+                }
+                using (var ms = new System.IO.MemoryStream()) { bmp.Save(ms, System.Drawing.Imaging.ImageFormat.Png); return ms.ToArray(); }
+            }
+        }
+
         void RespawnAll()
         {
-            foreach (var e in _npcs.ToList())
-                if (e != null && !e.IsDestroyed) e.Kill();
-            _npcs.Clear();
-            foreach (var m in _data.Markets)
-                SpawnNpc(new Vector3(m.X, m.Y, m.Z), Quaternion.Euler(0f, m.Yaw, 0f));
+            KillAll();
+            SpawnAll();
         }
 
         bool IsMarketNpc(BaseEntity ent) => ent != null && _npcs.Contains(ent);
@@ -359,6 +424,7 @@ namespace Oxide.Plugins
             arg.ReplyWith(JsonConvert.SerializeObject(new {
                 markets = _data.Markets.Select((m, i) => new {
                     index = i, x = m.X, y = m.Y, z = m.Z, name = m.Name, showName = m.ShowName,
+                    sign = m.Sign, signText = m.SignText,
                     currencyShortname = m.CurrencyShortname, currencyName = m.CurrencyName,
                     items = m.Items.Select((it, j) => new { index = j, shortname = it.Shortname, displayName = it.DisplayName, price = it.Price, amount = it.Amount }).ToList()
                 }).ToList()
@@ -376,6 +442,21 @@ namespace Oxide.Plugins
             _data.Markets[idx].ShowName = a[1] == "1" || a[1].ToLower() == "true";
             _data.Markets[idx].Name = a.Length > 2 ? string.Join(" ", a.Skip(2)) : "";
             SaveData();
+            arg.ReplyWith("{\"success\":true}");
+        }
+
+        [ConsoleCommand("bm.setsign")]
+        void CcSetSign(ConsoleSystem.Arg arg)
+        {
+            if (!IsServerCmd(arg)) return;
+            var a = GetArgs(arg);
+            if (a.Length < 2) { arg.ReplyWith("{\"error\":\"usage: bm.setsign <index> <on 0|1> [text]\"}"); return; }
+            int idx = ParseInt(a[0], -1);
+            if (!ValidMarket(idx)) { arg.ReplyWith("{\"error\":\"bad index\"}"); return; }
+            _data.Markets[idx].Sign = a[1] == "1" || a[1].ToLower() == "true";
+            _data.Markets[idx].SignText = a.Length > 2 ? string.Join(" ", a.Skip(2)) : "";
+            SaveData();
+            RespawnAll(); // re-place/re-text signs
             arg.ReplyWith("{\"success\":true}");
         }
 
