@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
-import { getPlugin } from "@/lib/exclusive-plugins";
 import { writeTextFile } from "@/server/sftp/service";
 import { fireAndForgetCommand } from "@/server/rcon/service";
+import { resolveExclusivePlugin } from "@/server/plugins/resolve-exclusive";
 
 type Params = { params: Promise<{ pluginId: string }> };
 
@@ -12,7 +12,7 @@ export async function POST(request: NextRequest, { params }: Params) {
   if (response) return response;
 
   const { pluginId } = await params;
-  const plugin = getPlugin(pluginId);
+  const plugin = await resolveExclusivePlugin(pluginId);
   if (!plugin) return NextResponse.json({ error: "Plugin not found" }, { status: 404 });
 
   const body = (await request.json()) as { serverId?: string };
