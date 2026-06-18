@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("MyRconAdminPanel", "MyRcon", "1.9.1")]
+    [Info("MyRconAdminPanel", "MyRcon", "1.9.2")]
     [Description("MyRcon exclusive in-game admin dashboard")]
     public class MyRconAdminPanel : RustPlugin
     {
@@ -48,7 +48,7 @@ namespace Oxide.Plugins
         private const string CBtnOff     = "0.09 0.11 0.15 1";
         private const string CCooldown   = "0.55 0.18 0.08 1";
 
-        private const string PluginVersion = "1.9.0";
+        private const string PluginVersion = "1.9.2";
 
         // ── Rate limiting ─────────────────────────────────────────────────────
         private const double GiveCooldownSecs = 2.0;
@@ -184,7 +184,7 @@ namespace Oxide.Plugins
             if (!permission.UserHasPermission(p.UserIDString, PermUse)) {
                 SendReply(p, "<color=#F06A0F>MyRcon Admin Panel</color>: You don't have permission."); return;
             }
-            var s = Get(p); s.Screen = ScrHome;
+            var s = Get(p); s.Screen = ScrPlayers;
             Draw(p, force: true);
         }
 
@@ -468,10 +468,9 @@ namespace Oxide.Plugins
             }, UiMain, UiBody);
 
             switch (s.Screen) {
-                case ScrHome:    DrawHome(ui, s);               break;
                 case ScrGive:    DrawGiveScreen(ui, s, player); break;
-                case ScrPlayers: DrawPlayersScreen(ui, s, player); break;
                 case ScrServer:  DrawServerScreen(ui, s);       break;
+                default:         DrawPlayersScreen(ui, s, player); break;
             }
 
             CuiHelper.AddUi(player, ui);
@@ -500,26 +499,21 @@ namespace Oxide.Plugins
                 }
             });
 
-            float xC = 0.096f;
-
-            if (s.Screen != ScrHome) {
-                ui.Add(new CuiPanel { Image = { Color = CDivider }, RectTransform = { AnchorMin = string.Format("{0:F3} 0.22", xC), AnchorMax = string.Format("{0:F3} 0.78", xC + 0.002f) } }, "MRAP_H");
-                xC += 0.009f;
+            // Tab bar — compact, always visible (Carbon Admin Centre style)
+            string[] tabScreens = { ScrPlayers, ScrGive, ScrServer };
+            string[] tabLabels  = { "Players",  "Give Items", "Server" };
+            float tx = 0.100f; const float tw = 0.116f; const float tg = 0.006f;
+            for (int t = 0; t < tabScreens.Length; t++) {
+                bool active = s.Screen == tabScreens[t] || (s.Screen == ScrHome && tabScreens[t] == ScrPlayers);
+                string tn = "MRAP_TAB" + t;
+                ui.Add(new CuiPanel { Image = { Color = active ? COrangeDeep : "0.072 0.090 0.124 1" }, RectTransform = { AnchorMin = string.Format("{0:F3} 0.14", tx), AnchorMax = string.Format("{0:F3} 0.86", tx + tw) } }, "MRAP_H", tn);
+                if (active) ui.Add(new CuiPanel { Image = { Color = COrange }, RectTransform = { AnchorMin = "0 0", AnchorMax = "1 0.10" } }, tn);
                 ui.Add(new CuiButton {
-                    Button        = { Command = "mrap.nav home", Color = "0.072 0.090 0.124 1" },
-                    RectTransform = { AnchorMin = string.Format("{0:F3} 0.17", xC), AnchorMax = string.Format("{0:F3} 0.83", xC + 0.078f) },
-                    Text          = { Text = "< Back", FontSize = 9, Align = TextAnchor.MiddleCenter, Color = CMuted, Font = "robotocondensed-regular.ttf" }
-                }, "MRAP_H");
-                xC += 0.086f;
-                ui.Add(new CuiPanel { Image = { Color = CDivider }, RectTransform = { AnchorMin = string.Format("{0:F3} 0.22", xC), AnchorMax = string.Format("{0:F3} 0.78", xC + 0.002f) } }, "MRAP_H");
-                xC += 0.009f;
-                string title = s.Screen == ScrGive ? "Give Items" : s.Screen == ScrPlayers ? "Players" : s.Screen == ScrServer ? "Server" : "";
-                if (title.Length > 0) {
-                    ui.Add(new CuiLabel {
-                        Text          = { Text = title, FontSize = 11, Align = TextAnchor.MiddleLeft, Color = CMuted, Font = "robotocondensed-regular.ttf" },
-                        RectTransform = { AnchorMin = string.Format("{0:F3} 0.10", xC), AnchorMax = "0.71 0.92" }
-                    }, "MRAP_H");
-                }
+                    Button        = { Command = "mrap.nav " + tabScreens[t], Color = "0 0 0 0" },
+                    RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1" },
+                    Text          = { Text = tabLabels[t], FontSize = 11, Align = TextAnchor.MiddleCenter, Color = active ? COrange : CMuted, Font = "robotocondensed-bold.ttf" }
+                }, "MRAP_H", tn + "_b");
+                tx += tw + tg;
             }
 
             // Online badge
