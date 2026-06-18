@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("MyRconBlackMarket", "MyRcon", "1.3.0")]
+    [Info("MyRconBlackMarket", "MyRcon", "1.3.1")]
     [Description("Per-NPC Black Market shops with cloning, analytics, and buyer tracking.")]
     public class MyRconBlackMarket : RustPlugin
     {
@@ -172,12 +172,18 @@ namespace Oxide.Plugins
 
         void SpawnSign(Market m, Quaternion rot)
         {
-            // Place the sign just beside the NPC, raised to eye height, facing the same way.
-            Vector3 offset = rot * new Vector3(1.0f, 1.1f, 0f);
-            var sign = GameManager.server.CreateEntity(SignPrefab, new Vector3(m.X, m.Y, m.Z) + offset, rot) as Signage;
+            // Place the post sign beside the NPC, on the ground (a raised/floating
+            // sign has no support and topples). Keep it at the NPC's ground level.
+            Vector3 side = rot * new Vector3(1.2f, 0f, 0f);
+            var pos = new Vector3(m.X + side.x, m.Y, m.Z + side.z);
+            var sign = GameManager.server.CreateEntity(SignPrefab, pos, rot) as Signage;
             if (sign == null) { PrintWarning("Failed to create Black Market sign (prefab missing?)."); return; }
             sign.enableSaving = false;
             sign.Spawn();
+            // Lock it down so it can't be picked up / knocked over
+            sign.SetFlag(BaseEntity.Flags.Locked, true);
+            var stability = sign.GetComponent<StabilityEntity>();
+            if (stability != null) stability.grounded = true;
             _signs.Add(sign);
             if (!string.IsNullOrEmpty(m.SignText)) ApplySignText(sign, m.SignText);
         }
@@ -229,7 +235,7 @@ namespace Oxide.Plugins
 
         object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo info)
         {
-            if (IsMarketNpc(entity))
+            if (IsMarketNpc(entity) || (entity != null && _signs.Contains(entity)))
             {
                 if (info != null) info.damageTypes?.ScaleAll(0f);
                 return true;
