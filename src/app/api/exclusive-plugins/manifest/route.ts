@@ -19,9 +19,7 @@ export type PluginManifest = Record<string, PluginManifestEntry>;
 
 export async function GET() {
   try {
-    const res = await fetch(MANIFEST_URL, {
-      next: { revalidate: 60 }, // cache for 60s
-    });
+    const res = await fetch(MANIFEST_URL, { cache: "no-store" });
     if (!res.ok) throw new Error(`GitHub returned ${res.status}`);
     const data = (await res.json()) as PluginManifest;
     return NextResponse.json(data);

@@ -19,7 +19,7 @@ export default async function ExclusivePluginsPage() {
       where: { key: { startsWith: "plugin_installed:" } },
       select: { key: true, value: true },
     }),
-    fetch(MANIFEST_URL, { next: { revalidate: 60 } })
+    fetch(MANIFEST_URL, { cache: "no-store" })
       .then((r) => (r.ok ? (r.json() as Promise<PluginManifest>) : null))
       .catch(() => null),
   ]);
