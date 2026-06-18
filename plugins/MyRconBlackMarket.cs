@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("MyRconBlackMarket", "MyRcon", "1.2.0")]
+    [Info("MyRconBlackMarket", "MyRcon", "1.2.1")]
     [Description("Per-NPC Black Market shops with cloning, analytics, and buyer tracking.")]
     public class MyRconBlackMarket : RustPlugin
     {
@@ -265,7 +265,19 @@ namespace Oxide.Plugins
                 string rn = "BM_R" + i;
                 bool canAfford = balance >= it.Price;
                 ui.Add(new CuiPanel { Image = { Color = "0.16 0.18 0.16 1" }, RectTransform = { AnchorMin = string.Format("0.03 {0:F3}", y0), AnchorMax = string.Format("0.97 {0:F3}", y1) } }, "BM_W", rn);
-                ui.Add(new CuiLabel { Text = { Text = ItemLabel(it), FontSize = 12, Align = TextAnchor.MiddleLeft, Color = "0.92 0.93 0.92 1", Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = "0.03 0", AnchorMax = "0.55 1" } }, rn);
+
+                // Item icon (rendered from the game's item definition)
+                var rowDef = ItemManager.FindItemDefinition(it.Shortname);
+                if (rowDef != null)
+                    ui.Add(new CuiElement {
+                        Parent = rn,
+                        Components = {
+                            new CuiImageComponent { ItemId = rowDef.itemid },
+                            new CuiRectTransformComponent { AnchorMin = "0.022 0.14", AnchorMax = "0.10 0.86" }
+                        }
+                    });
+
+                ui.Add(new CuiLabel { Text = { Text = ItemLabel(it), FontSize = 12, Align = TextAnchor.MiddleLeft, Color = "0.92 0.93 0.92 1", Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = "0.12 0", AnchorMax = "0.55 1" } }, rn);
                 ui.Add(new CuiLabel { Text = { Text = string.Format("x{0}", it.Amount), FontSize = 11, Align = TextAnchor.MiddleCenter, Color = "0.7 0.74 0.7 1" }, RectTransform = { AnchorMin = "0.55 0", AnchorMax = "0.66 1" } }, rn);
                 ui.Add(new CuiLabel { Text = { Text = string.Format("{0:N0}", it.Price), FontSize = 12, Align = TextAnchor.MiddleRight, Color = canAfford ? "0.55 0.85 0.45 1" : "0.8 0.5 0.45 1", Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = "0.66 0", AnchorMax = "0.80 1" } }, rn);
                 ui.Add(new CuiButton {
