@@ -1,6 +1,6 @@
 {
   "name": "myrcon",
-  "version": "0.1.72",
+  "version": "0.1.73",
   "description": "Self-hosted Rust server administration panel",
   "author": "MyRcon",
   "repository": {
