@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("MyRconBlackMarket", "MyRcon", "1.5.0")]
+    [Info("MyRconBlackMarket", "MyRcon", "1.5.1")]
     [Description("Per-NPC Black Market shops with cloning, analytics, and buyer tracking.")]
     public class MyRconBlackMarket : RustPlugin
     {
@@ -184,6 +184,10 @@ namespace Oxide.Plugins
             if (ent == null) { PrintWarning("Failed to create Black Market label prop."); return; }
             ent.enableSaving = false;
             ent.Spawn();
+            // Strip the ground-watch components so the plugin-spawned prop doesn't
+            // self-destruct / collapse when it's not on "valid" deploy ground.
+            foreach (var c in ent.GetComponentsInChildren<DestroyOnGroundMissing>()) UnityEngine.Object.Destroy(c);
+            foreach (var c in ent.GetComponentsInChildren<GroundWatch>())            UnityEngine.Object.Destroy(c);
             _signs.Add(ent);
 
             var vm = ent as VendingMachine;
