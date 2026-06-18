@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("MyRconBlackMarket", "MyRcon", "1.0.4")]
+    [Info("MyRconBlackMarket", "MyRcon", "1.1.0")]
     [Description("Interactable Black Market NPC shop — buy items with scrap. Invincible, non-combat NPCs placed by admins.")]
     public class MyRconBlackMarket : RustPlugin
     {
@@ -67,15 +67,32 @@ namespace Oxide.Plugins
 
         protected override void SaveConfig() => Config.WriteObject(_cfg, true);
 
-        // ── Saved NPC placements ──────────────────────────────────────────────────
-        class NpcPos { public float X, Y, Z, Yaw; }
-        class SavedData { public List<NpcPos> Npcs = new List<NpcPos>(); }
+        // ── Saved NPC placements + analytics ──────────────────────────────────────
+        class NpcPos { public float X, Y, Z, Yaw; public string Name = ""; public bool ShowName = false; }
+        class ItemStat { public int Count; public int Qty; public int Revenue; }
+        class PlayerStat { public string Name = ""; public int Opens; public int Purchases; public int Spent; }
+        class SavedData
+        {
+            public List<NpcPos> Npcs                       = new List<NpcPos>();
+            public Dictionary<string, ItemStat>   ItemStats = new Dictionary<string, ItemStat>();
+            public Dictionary<string, PlayerStat> Players   = new Dictionary<string, PlayerStat>();
+        }
 
         void LoadData()
         {
             try { _data = Interface.Oxide.DataFileSystem.ReadObject<SavedData>(Name) ?? new SavedData(); }
             catch { _data = new SavedData(); }
-            if (_data.Npcs == null) _data.Npcs = new List<NpcPos>();
+            if (_data.Npcs      == null) _data.Npcs      = new List<NpcPos>();
+            if (_data.ItemStats == null) _data.ItemStats = new Dictionary<string, ItemStat>();
+            if (_data.Players   == null) _data.Players   = new Dictionary<string, PlayerStat>();
+        }
+
+        PlayerStat PlayerStatFor(BasePlayer p)
+        {
+            PlayerStat st;
+            if (!_data.Players.TryGetValue(p.UserIDString, out st)) { st = new PlayerStat(); _data.Players[p.UserIDString] = st; }
+            st.Name = p.displayName;
+            return st;
         }
         void SaveData() => Interface.Oxide.DataFileSystem.WriteObject(Name, _data);
 
@@ -137,7 +154,16 @@ namespace Oxide.Plugins
             var ent = hit.GetEntity();
             if (!IsMarketNpc(ent)) return;
 
-            OpenShop(player);
+            // Record interaction + resolve this NPC's display name
+            PlayerStatFor(player).Opens++;
+            SaveData();
+
+            string npcName = null;
+            int idx = _npcs.IndexOf(ent);
+            if (idx >= 0 && idx < _data.Npcs.Count && _data.Npcs[idx].ShowName)
+                npcName = _data.Npcs[idx].Name;
+
+            OpenShop(player, npcName);
         }
 
         // ── Admin chat command ──────────────────────────────────────────────────
@@ -187,7 +213,7 @@ namespace Oxide.Plugins
         }
 
         // ── Shop UI ─────────────────────────────────────────────────────────────
-        void OpenShop(BasePlayer player)
+        void OpenShop(BasePlayer player, string npcName = null)
         {
             int balance = CurrencyAmount(player);
             CuiHelper.DestroyUi(player, UiName);
@@ -208,7 +234,8 @@ namespace Oxide.Plugins
 
             // Header
             ui.Add(new CuiPanel { Image = { Color = "0.16 0.18 0.16 1" }, RectTransform = { AnchorMin = "0 0.92", AnchorMax = "1 1" } }, "BM_W", "BM_H");
-            ui.Add(new CuiLabel { Text = { Text = "BLACK MARKET", FontSize = 16, Align = TextAnchor.MiddleLeft, Color = "0.55 0.85 0.45 1", Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = "0.03 0", AnchorMax = "0.7 1" } }, "BM_H");
+            string title = string.IsNullOrEmpty(npcName) ? "BLACK MARKET" : npcName.ToUpper();
+            ui.Add(new CuiLabel { Text = { Text = title, FontSize = 16, Align = TextAnchor.MiddleLeft, Color = "0.55 0.85 0.45 1", Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = "0.03 0", AnchorMax = "0.7 1" } }, "BM_H");
             ui.Add(new CuiLabel { Text = { Text = string.Format("{0}: {1:N0}", _cfg.CurrencyName, balance), FontSize = 12, Align = TextAnchor.MiddleRight, Color = "0.85 0.88 0.85 1", Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = "0.55 0", AnchorMax = "0.88 1" } }, "BM_H");
             ui.Add(new CuiButton { Button = { Command = "mrbm.close", Color = "0.55 0.18 0.16 1" }, RectTransform = { AnchorMin = "0.9 0.12", AnchorMax = "0.985 0.88" }, Text = { Text = "X", FontSize = 13, Align = TextAnchor.MiddleCenter, Color = "1 0.7 0.7 1" } }, "BM_H");
 
@@ -262,6 +289,15 @@ namespace Oxide.Plugins
             var give = ItemManager.Create(def, it.Amount);
             if (give == null) { Msg(player, "Purchase failed."); return; }
             player.GiveItem(give);
+
+            // Analytics
+            ItemStat istat;
+            if (!_data.ItemStats.TryGetValue(it.Shortname, out istat)) { istat = new ItemStat(); _data.ItemStats[it.Shortname] = istat; }
+            istat.Count++; istat.Qty += it.Amount; istat.Revenue += it.Price;
+            var pstat = PlayerStatFor(player);
+            pstat.Purchases++; pstat.Spent += it.Price;
+            SaveData();
+
             Msg(player, string.Format("Purchased {0} x{1} for {2:N0} {3}.", ItemLabel(it), it.Amount, it.Price, _cfg.CurrencyName));
             OpenShop(player); // refresh balance
         }
@@ -308,8 +344,62 @@ namespace Oxide.Plugins
         {
             if (!IsServerCmd(arg)) return;
             arg.ReplyWith(JsonConvert.SerializeObject(new {
-                npcs = _data.Npcs.Select((n, i) => new { index = i, x = n.X, y = n.Y, z = n.Z, yaw = n.Yaw }).ToList()
+                npcs = _data.Npcs.Select((n, i) => new { index = i, x = n.X, y = n.Y, z = n.Z, yaw = n.Yaw, name = n.Name, showName = n.ShowName }).ToList()
             }));
+        }
+
+        [ConsoleCommand("bm.setnpc")]
+        void CcSetNpc(ConsoleSystem.Arg arg)
+        {
+            if (!IsServerCmd(arg)) return;
+            var a = GetArgs(arg);
+            if (a.Length < 2) { arg.ReplyWith("{\"error\":\"usage: bm.setnpc <index> <showName 0|1> [name]\"}"); return; }
+            int idx = ParseInt(a[0], -1);
+            if (idx < 0 || idx >= _data.Npcs.Count) { arg.ReplyWith("{\"error\":\"bad index\"}"); return; }
+            _data.Npcs[idx].ShowName = a[1] == "1" || a[1].ToLower() == "true";
+            _data.Npcs[idx].Name = a.Length > 2 ? string.Join(" ", a.Skip(2)) : "";
+            SaveData();
+            arg.ReplyWith("{\"success\":true}");
+        }
+
+        [ConsoleCommand("bm.getanalytics")]
+        void CcGetAnalytics(ConsoleSystem.Arg arg)
+        {
+            if (!IsServerCmd(arg)) return;
+            var sold = _data.ItemStats.Values.Where(s => s.Count > 0).Select(s => s.Count).ToList();
+            double avg = sold.Count > 0 ? sold.Average() : 0;
+            int totalSales = _data.ItemStats.Values.Sum(s => s.Count);
+            int totalRevenue = _data.ItemStats.Values.Sum(s => s.Revenue);
+
+            var items = _cfg.Items.Select(it => {
+                ItemStat st;
+                _data.ItemStats.TryGetValue(it.Shortname, out st);
+                int count   = st != null ? st.Count : 0;
+                int qty     = st != null ? st.Qty : 0;
+                int revenue = st != null ? st.Revenue : 0;
+                string suggestion;
+                if (count == 0)                                      suggestion = "No sales — consider lowering price or removing.";
+                else if (count >= Math.Max(5, avg * 1.5))            suggestion = "Top seller — consider raising the price.";
+                else                                                 suggestion = "Selling normally.";
+                return new { shortname = it.Shortname, displayName = ItemLabel(it), price = it.Price, amount = it.Amount, count, qty, revenue, suggestion };
+            }).OrderByDescending(x => x.count).ToList();
+
+            arg.ReplyWith(JsonConvert.SerializeObject(new {
+                currencyName = _cfg.CurrencyName, totalSales, totalRevenue, items
+            }));
+        }
+
+        [ConsoleCommand("bm.getbuyers")]
+        void CcGetBuyers(ConsoleSystem.Arg arg)
+        {
+            if (!IsServerCmd(arg)) return;
+            var buyers = _data.Players.Where(kv => kv.Value.Purchases > 0)
+                .Select(kv => new { steamId = kv.Key, name = kv.Value.Name, purchases = kv.Value.Purchases, spent = kv.Value.Spent })
+                .OrderByDescending(b => b.spent).ToList();
+            var lookers = _data.Players.Where(kv => kv.Value.Purchases == 0 && kv.Value.Opens > 0)
+                .Select(kv => new { steamId = kv.Key, name = kv.Value.Name, opens = kv.Value.Opens })
+                .OrderByDescending(l => l.opens).ToList();
+            arg.ReplyWith(JsonConvert.SerializeObject(new { buyers, lookers }));
         }
 
         [ConsoleCommand("bm.additem")]
