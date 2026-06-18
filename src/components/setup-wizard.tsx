@@ -14,6 +14,33 @@ export function SetupWizard() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [connectionOk, setConnectionOk] = useState<boolean | null>(null);
+  const [mode, setMode] = useState<"fresh" | "import">("fresh");
+
+  async function importSetup(formData: FormData) {
+    setBusy(true); setMessage(null); setConnectionOk(null);
+    try {
+      const file = formData.get("backup") as File | null;
+      if (!file || file.size === 0) throw new Error("Choose your backup file.");
+      const backup = await file.text();
+      const data = await api<{ imported: number; skipped: number }>("/api/setup/import", {
+        method: "POST",
+        body: JSON.stringify({
+          backup,
+          passphrase: formData.get("passphrase"),
+          ownerName: formData.get("ownerName"),
+          ownerEmail: formData.get("ownerEmail"),
+          ownerPassword: formData.get("ownerPassword"),
+        }),
+      });
+      setConnectionOk(true);
+      setMessage(`Imported ${data.imported} server(s)${data.skipped ? `, ${data.skipped} skipped` : ""}. Opening dashboard...`);
+      window.setTimeout(() => { window.location.href = "/dashboard"; }, 900);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Import failed");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function submit(formData: FormData) {
     setBusy(true);
@@ -66,6 +93,32 @@ export function SetupWizard() {
         </div>
 
         <Panel>
+          <div className="mb-5 flex gap-1 border-b border-white/10">
+            <button onClick={() => { setMode("fresh"); setMessage(null); }} className={`px-4 py-2 text-sm font-medium transition border-b-2 -mb-px ${mode === "fresh" ? "border-orange-400 text-orange-100" : "border-transparent text-slate-400 hover:text-white"}`}>Start Fresh</button>
+            <button onClick={() => { setMode("import"); setMessage(null); }} className={`px-4 py-2 text-sm font-medium transition border-b-2 -mb-px ${mode === "import" ? "border-orange-400 text-orange-100" : "border-transparent text-slate-400 hover:text-white"}`}>Import a Backup</button>
+          </div>
+
+          {mode === "import" && (
+            <form action={importSetup} className="grid gap-6">
+              <div>
+                <h2 className="text-xl font-semibold text-white">Import Existing Setup</h2>
+                <p className="mt-1 text-sm text-slate-400">Already set up on another machine? Export a backup there (Settings → Backup &amp; Transfer), then import it here — no retyping.</p>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <Field label="Owner name"><Input name="ownerName" required minLength={2} autoComplete="name" /></Field>
+                <Field label="Owner email"><Input name="ownerEmail" type="email" required autoComplete="email" /></Field>
+                <Field label="Owner password" hint="Use at least 10 characters."><Input name="ownerPassword" type="password" required minLength={10} autoComplete="new-password" /></Field>
+                <Field label="Backup passphrase" hint="The passphrase you set when exporting."><Input name="passphrase" type="password" required /></Field>
+              </div>
+              <Field label="Backup file (.myrcon)">
+                <input name="backup" type="file" accept=".myrcon,application/octet-stream,text/plain" required className="text-sm text-slate-300 file:mr-3 file:rounded-md file:border-0 file:bg-white/10 file:px-3 file:py-1.5 file:text-sm file:text-white" />
+              </Field>
+              {message ? <div className={`rounded-md border px-3 py-2 text-sm ${connectionOk === false ? "border-amber-500/30 bg-amber-500/10 text-amber-100" : "border-emerald-500/30 bg-emerald-500/10 text-emerald-100"}`}>{message}</div> : null}
+              <Button disabled={busy} className="w-full sm:w-auto">{busy ? "Importing..." : "Import and Open Dashboard"}</Button>
+            </form>
+          )}
+
+          {mode === "fresh" && (
           <form action={submit} className="grid gap-6">
             <div>
               <h2 className="text-xl font-semibold text-white">First Run Setup</h2>
@@ -116,6 +169,7 @@ export function SetupWizard() {
               {busy ? "Saving..." : "Test Connection and Open Dashboard"}
             </Button>
           </form>
+          )}
         </Panel>
       </div>
     </main>
