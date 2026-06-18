@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("MyRconAdminPanel", "MyRcon", "1.9.8")]
+    [Info("MyRconAdminPanel", "MyRcon", "1.9.9")]
     [Description("MyRcon exclusive in-game admin dashboard")]
     public class MyRconAdminPanel : RustPlugin
     {
@@ -25,10 +25,10 @@ namespace Oxide.Plugins
 
         // ── Palette ───────────────────────────────────────────────────────────
         // ── Palette — matched to Carbon Admin Centre: flat grey + muted green ──
-        private const string CBg         = "0.212 0.220 0.214 0.985";
-        private const string CHeader     = "0.169 0.176 0.171 1";
-        private const string CPanel      = "0.247 0.255 0.249 1";
-        private const string CCell       = "0.149 0.157 0.152 1";   // inset value fields (darker)
+        private const string CBg         = "0.243 0.251 0.243 1";   // solid, opaque grey (no game showing through)
+        private const string CHeader     = "0.188 0.196 0.188 1";
+        private const string CPanel      = "0.214 0.222 0.214 1";
+        private const string CCell       = "0.149 0.157 0.149 1";   // inset value fields / rows (darker)
         private const string CCellSel    = "0.200 0.330 0.180 1";
         private const string CDivider    = "1 1 1 0.05";
         // "Orange" names retained, but recolored to Carbon's muted green (primary accent)
@@ -50,7 +50,7 @@ namespace Oxide.Plugins
         private const string CBtnOff     = "0.247 0.255 0.249 1";
         private const string CCooldown   = "0.55 0.40 0.12 1";
 
-        private const string PluginVersion = "1.9.8";
+        private const string PluginVersion = "1.9.9";
 
         // ── Rate limiting ─────────────────────────────────────────────────────
         private const double GiveCooldownSecs = 2.0;
@@ -888,6 +888,10 @@ namespace Oxide.Plugins
             int pages       = Math.Max(1, (int)Math.Ceiling(online.Count / (float)PlayersPerPage));
             s.PlayerPage    = Mathf.Clamp(s.PlayerPage, 0, pages - 1);
             var pagePlayers = online.Skip(s.PlayerPage * PlayersPerPage).Take(PlayersPerPage).ToList();
+
+            // Default-select a player so the info panel is populated (Carbon behaviour)
+            if (s.PlayerSel == 0 && online.Count > 0)
+                s.PlayerSel = online.Any(p => p.userID == invoker.userID) ? invoker.userID : online[0].userID;
 
             // Left column: search + online/offline lists
             string listN = "MRAP_PL";
