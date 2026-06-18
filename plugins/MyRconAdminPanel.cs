@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("MyRconAdminPanel", "MyRcon", "1.9.10")]
+    [Info("MyRconAdminPanel", "MyRcon", "1.9.11")]
     [Description("MyRcon exclusive in-game admin dashboard")]
     public class MyRconAdminPanel : RustPlugin
     {
@@ -50,7 +50,7 @@ namespace Oxide.Plugins
         private const string CBtnOff     = "0.247 0.255 0.249 1";
         private const string CCooldown   = "0.55 0.40 0.12 1";
 
-        private const string PluginVersion = "1.9.10";
+        private const string PluginVersion = "1.9.11";
 
         // ── Rate limiting ─────────────────────────────────────────────────────
         private const double GiveCooldownSecs = 2.0;
@@ -483,6 +483,12 @@ namespace Oxide.Plugins
                 case ScrServer:  DrawServerScreen(ui, s);       break;
                 default:         DrawPlayersScreen(ui, s, player); break;
             }
+
+            // Version label — bottom-right of every screen
+            ui.Add(new CuiLabel {
+                Text          = { Text = "v" + PluginVersion, FontSize = 15, Align = TextAnchor.LowerRight, Color = COrange, Font = "robotocondensed-bold.ttf" },
+                RectTransform = { AnchorMin = "0.78 0.008", AnchorMax = "0.992 0.052" }
+            }, UiMain, "MRAP_VER");
 
             CuiHelper.AddUi(player, ui);
         }
