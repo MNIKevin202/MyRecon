@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Activity, Copy, Database, HardDrive, Power, Radio, Users } from "lucide-react";
+import { Activity, Ban, Copy, Database, HardDrive, Heart, Power, Radio, Skull, UserX, Users } from "lucide-react";
 import { Button, Panel, Select } from "@/components/ui";
-import { api } from "@/lib/utils";
+import { api, clsx } from "@/lib/utils";
 
 type Server = {
   id: string;
@@ -52,6 +52,12 @@ type Event = {
   source: string;
   message: string;
   createdAt: string;
+};
+
+type ConnectedPlayer = {
+  steamId: string;
+  name: string;
+  ping: number | null;
 };
 
 type Diagnostics = {
@@ -117,6 +123,9 @@ export function DashboardClient({ servers }: { servers: Server[] }) {
   const [rebooting, setRebooting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [inferredConnectionStatus, setInferredConnectionStatus] = useState<string | null>(null);
+  const [onlinePlayers, setOnlinePlayers] = useState<ConnectedPlayer[]>([]);
+  const [expandedPlayer, setExpandedPlayer] = useState<string | null>(null);
+  const [actionBusy, setActionBusy] = useState<string | null>(null);
   const selected = useMemo(() => servers.find((server) => server.id === serverId), [serverId, servers]);
   const statusIndicatorClass =
     status?.online || status?.stale
@@ -151,6 +160,13 @@ export function DashboardClient({ servers }: { servers: Server[] }) {
           : data.inferredConnectionStatus,
       );
       setNotice(null);
+      // Online players (with ping) for the management list
+      try {
+        const playerData = await api<{ connectedPlayers: ConnectedPlayer[] }>(`/api/servers/${serverId}/players`);
+        setOnlinePlayers(playerData.connectedPlayers ?? []);
+      } catch {
+        setOnlinePlayers([]);
+      }
       if (selected) {
         fetch("/api/notifications/check", {
           method: "POST",
@@ -185,6 +201,25 @@ export function DashboardClient({ servers }: { servers: Server[] }) {
     setInferredConnectionStatus(null);
     setStatus(null);
     setEvents([]);
+    setOnlinePlayers([]);
+    setExpandedPlayer(null);
+  }
+
+  async function playerAction(action: "heal" | "kill" | "kick" | "ban", steamId: string, name: string) {
+    if ((action === "kill" || action === "kick" || action === "ban") && !window.confirm(`${action[0].toUpperCase()}${action.slice(1)} ${name}?`)) return;
+    setActionBusy(`${action}-${steamId}`);
+    try {
+      await api(`/api/servers/${serverId}/players/action`, {
+        method: "POST",
+        body: JSON.stringify({ action, steamId, reason: "" }),
+      });
+      setNotice(`${action[0].toUpperCase()}${action.slice(1)} sent for ${name}.`);
+      if (action === "kick" || action === "ban") setOnlinePlayers((prev) => prev.filter((p) => p.steamId !== steamId));
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Player action failed");
+    } finally {
+      setActionBusy(null);
+    }
   }
 
   function errorText(details: RconErrorDetails) {
@@ -439,6 +474,53 @@ export function DashboardClient({ servers }: { servers: Server[] }) {
         <Stat label="Memory" value={status?.memoryMb ? `${status.memoryMb} MB` : "Unavailable"} icon={HardDrive} />
         <Stat label="World" value={status?.worldSize ? `${status.worldSize} / ${status.seed ?? "seed ?"}` : "Unknown"} icon={Radio} />
       </div>
+
+      <Panel>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-white">Online Players</h2>
+          <span className="text-sm text-slate-400">{onlinePlayers.length} online</span>
+        </div>
+        <div className="mt-4 grid max-h-96 gap-2 overflow-y-auto">
+          {onlinePlayers.length === 0 ? (
+            <p className="text-sm text-slate-500">No players online (or click Refresh to load).</p>
+          ) : null}
+          {onlinePlayers.map((player) => {
+            const open = expandedPlayer === player.steamId;
+            const ping = player.ping;
+            const pingClr = ping == null ? "text-slate-500" : ping < 80 ? "text-emerald-400" : ping < 150 ? "text-amber-400" : "text-red-400";
+            return (
+              <div key={player.steamId} className={clsx("rounded-md border bg-black/20", open ? "border-orange-500/50" : "border-white/10")}>
+                <button
+                  onClick={() => setExpandedPlayer(open ? null : player.steamId)}
+                  className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-white">{player.name}</div>
+                    <div className="font-mono text-xs text-slate-500">{player.steamId}</div>
+                  </div>
+                  <span className={clsx("shrink-0 text-sm font-bold", pingClr)}>{ping == null ? "—" : `${ping}ms`}</span>
+                </button>
+                {open ? (
+                  <div className="flex flex-wrap gap-2 border-t border-white/10 px-3 py-2">
+                    <Button variant="secondary" onClick={() => playerAction("heal", player.steamId, player.name)} disabled={actionBusy === `heal-${player.steamId}`}>
+                      <Heart className="h-4 w-4" />Heal
+                    </Button>
+                    <Button variant="danger" onClick={() => playerAction("kill", player.steamId, player.name)} disabled={actionBusy === `kill-${player.steamId}`}>
+                      <Skull className="h-4 w-4" />Kill
+                    </Button>
+                    <Button variant="danger" onClick={() => playerAction("kick", player.steamId, player.name)} disabled={actionBusy === `kick-${player.steamId}`}>
+                      <UserX className="h-4 w-4" />Kick
+                    </Button>
+                    <Button variant="danger" onClick={() => playerAction("ban", player.steamId, player.name)} disabled={actionBusy === `ban-${player.steamId}`}>
+                      <Ban className="h-4 w-4" />Ban
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      </Panel>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
         <Panel>
