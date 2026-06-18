@@ -52,6 +52,22 @@ type Tab = "saved" | "add" | "copy" | "config";
 
 type ConfigField = { key: string; label: string; type: "string" | "text" | "number" | "bool"; hint?: string };
 
+const CRATE_PRESETS = [
+  { label: "15 minutes (default)", value: "900" },
+  { label: "10 minutes", value: "600" },
+  { label: "5 minutes", value: "300" },
+  { label: "2 minutes", value: "120" },
+  { label: "1 minute", value: "60" },
+];
+
+function friendlyCrate(seconds: number) {
+  if (seconds % 60 === 0) {
+    const m = seconds / 60;
+    return `${m} minute${m === 1 ? "" : "s"}`;
+  }
+  return `${seconds} second${seconds === 1 ? "" : "s"}`;
+}
+
 export function ServerManager({ initialServers }: { initialServers: Server[] }) {
   const [servers, setServers] = useState(initialServers);
   const [tab, setTab] = useState<Tab>("saved");
@@ -86,6 +102,73 @@ export function ServerManager({ initialServers }: { initialServers: Server[] }) 
       setMessage(error instanceof Error ? error.message : "Could not read server config");
     } finally {
       setConfigBusy(false);
+    }
+  }
+
+  // Locked Crate Hack Timer
+  const [crateSeconds, setCrateSeconds] = useState("900");
+  const [crateCustom, setCrateCustom] = useState(false);
+  const [crateBusy, setCrateBusy] = useState(false);
+
+  async function loadCrateTimer() {
+    if (!configServerId) { setMessage("Choose a server first."); return; }
+    setCrateBusy(true);
+    setMessage("Reading locked crate timer...");
+    try {
+      const data = await api<{ output: string }>(`/api/servers/${configServerId}/console`, {
+        method: "POST",
+        body: JSON.stringify({ command: "hackablelockedcrate.requiredhackseconds" }),
+      });
+      const match = (data.output ?? "").match(/([\d.]+)/);
+      if (!match) {
+        setMessage("Could not read the current value from the server response.");
+        return;
+      }
+      const seconds = Math.round(parseFloat(match[1]));
+      setCrateSeconds(String(seconds));
+      setCrateCustom(!CRATE_PRESETS.some((p) => p.value === String(seconds)));
+      setMessage(`Current locked crate timer: ${friendlyCrate(seconds)}.`);
+    } catch {
+      setMessage("Failed to read locked crate timer. Check RCON connection.");
+    } finally {
+      setCrateBusy(false);
+    }
+  }
+
+  async function applyCrateTimer(value: string) {
+    if (!configServerId) { setMessage("Choose a server first."); return; }
+    const n = Number(value);
+    if (!Number.isFinite(n) || n < 1) {
+      setMessage("Enter a positive number of seconds (minimum 1).");
+      return;
+    }
+    if (n > 900) {
+      setMessage("Maximum locked crate timer is 900 seconds (15 minutes).");
+      return;
+    }
+    const seconds = Math.round(n);
+    setCrateBusy(true);
+    setMessage(`Updating locked crate timer to ${friendlyCrate(seconds)}...`);
+    try {
+      await api(`/api/servers/${configServerId}/console`, {
+        method: "POST",
+        body: JSON.stringify({ command: `hackablelockedcrate.requiredhackseconds ${seconds}` }),
+      });
+      let saved = false;
+      try {
+        await api(`/api/servers/${configServerId}/console`, {
+          method: "POST",
+          body: JSON.stringify({ command: "server.writecfg" }),
+        });
+        saved = true;
+      } catch { /* convar applied; persistence is best-effort */ }
+      setCrateSeconds(String(seconds));
+      setCrateCustom(!CRATE_PRESETS.some((p) => p.value === String(seconds)));
+      setMessage(`Locked crate timer updated to ${friendlyCrate(seconds)}.${saved ? " Saved to config." : ""}`);
+    } catch {
+      setMessage("Failed to update locked crate timer. Check RCON connection.");
+    } finally {
+      setCrateBusy(false);
     }
   }
 
@@ -508,7 +591,8 @@ export function ServerManager({ initialServers }: { initialServers: Server[] }) 
       )}
 
       {tab === "config" && (
-        <Panel className="max-w-2xl">
+        <div className="grid max-w-2xl gap-5">
+        <Panel>
           <div className="mb-1 flex items-center gap-2">
             <Settings2 className="h-5 w-5 text-orange-300" />
             <h2 className="text-lg font-semibold">Server Config</h2>
@@ -571,6 +655,60 @@ export function ServerManager({ initialServers }: { initialServers: Server[] }) 
             )}
           </div>
         </Panel>
+
+        <Panel>
+          <div className="mb-1 flex items-center gap-2">
+            <Settings2 className="h-5 w-5 text-emerald-300" />
+            <h2 className="text-lg font-semibold">Recommended PvE Settings</h2>
+          </div>
+          <p className="mb-5 text-sm text-slate-400">Quick gameplay tweaks applied to the server selected above.</p>
+
+          <Field label="Locked Crate Hack Timer" hint="Controls how long hackable locked crates take to unlock.">
+            <div className="grid gap-2">
+              <Select
+                value={crateCustom ? "custom" : crateSeconds}
+                onChange={(event) => {
+                  const v = event.target.value;
+                  if (v === "custom") { setCrateCustom(true); return; }
+                  setCrateCustom(false);
+                  setCrateSeconds(v);
+                }}
+              >
+                {CRATE_PRESETS.map((p) => (
+                  <option key={p.value} value={p.value}>{p.label}</option>
+                ))}
+                <option value="custom">Custom seconds…</option>
+              </Select>
+              {crateCustom && (
+                <Input
+                  type="number"
+                  value={crateSeconds}
+                  min={1}
+                  max={900}
+                  onChange={(event) => setCrateSeconds(event.target.value)}
+                  placeholder="Seconds (1–900)"
+                />
+              )}
+            </div>
+          </Field>
+
+          <div className="mt-4 flex flex-wrap gap-3">
+            <Button onClick={() => applyCrateTimer(crateSeconds)} disabled={crateBusy || !configServerId}>
+              <Settings2 className="h-4 w-4" />Apply
+            </Button>
+            <Button variant="secondary" onClick={() => applyCrateTimer("300")} disabled={crateBusy || !configServerId}>
+              Apply 5 Minute Crates
+            </Button>
+            <Button variant="secondary" onClick={loadCrateTimer} disabled={crateBusy || !configServerId}>
+              <Check className="h-4 w-4" />Show current
+            </Button>
+          </div>
+
+          <p className="mt-3 text-xs text-amber-500/80">
+            Runtime setting only. Reapply after a server restart unless it&apos;s saved to server.cfg (Apply runs server.writecfg to persist it).
+          </p>
+        </Panel>
+        </div>
       )}
 
       {tab === "copy" && (
