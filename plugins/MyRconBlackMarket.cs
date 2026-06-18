@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("MyRconBlackMarket", "MyRcon", "1.2.1")]
+    [Info("MyRconBlackMarket", "MyRcon", "1.2.2")]
     [Description("Per-NPC Black Market shops with cloning, analytics, and buyer tracking.")]
     public class MyRconBlackMarket : RustPlugin
     {
@@ -120,10 +120,16 @@ namespace Oxide.Plugins
             permission.RegisterPermission(PermUse, this);
             cmd.AddChatCommand("bm", this, "CmdBlackMarket");
             LoadData();
+            // Hot-reload case: the server is already running (world loaded), so
+            // OnServerInitialized may not fire again — respawn shortly after load.
+            timer.Once(1.5f, () => { if (TerrainMeta.Size.x > 0f) EnsureSpawned(); });
         }
 
-        void OnServerInitialized()
+        void OnServerInitialized() => EnsureSpawned();
+
+        void EnsureSpawned()
         {
+            if (_npcs.Count > 0) return; // already spawned this load
             foreach (var m in _data.Markets)
                 SpawnNpc(new Vector3(m.X, m.Y, m.Z), Quaternion.Euler(0f, m.Yaw, 0f));
         }
