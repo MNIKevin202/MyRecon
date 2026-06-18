@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("MyRconBlackMarket", "MyRcon", "1.0.1")]
+    [Info("MyRconBlackMarket", "MyRcon", "1.0.2")]
     [Description("Interactable Black Market NPC shop — buy items with scrap. Invincible, non-combat NPCs placed by admins.")]
     public class MyRconBlackMarket : RustPlugin
     {
@@ -141,6 +141,7 @@ namespace Oxide.Plugins
 
         // ── Admin chat command ──────────────────────────────────────────────────
         [ChatCommand("blackmarket")]
+        [ChatCommand("bm")]
         void CmdBlackMarket(BasePlayer player, string cmd, string[] args)
         {
             if (!IsAdmin(player)) { Msg(player, "You don't have permission."); return; }
