@@ -8,14 +8,14 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("MyRconBlackMarket", "MyRcon", "1.4.0")]
+    [Info("MyRconBlackMarket", "MyRcon", "1.5.0")]
     [Description("Per-NPC Black Market shops with cloning, analytics, and buyer tracking.")]
     public class MyRconBlackMarket : RustPlugin
     {
         const string PermAdmin = "myrconblackmarket.admin";
         const string PermUse   = "myrconblackmarket.use";
         const string NpcPrefab  = "assets/prefabs/npc/bandit/shopkeepers/bandit_shopkeeper.prefab";
-        const string SignPrefab = "assets/prefabs/deployable/signs/sign.post.single.prefab";
+        const string SignPrefab = "assets/prefabs/deployable/vendingmachine/vendingmachine.deployed.prefab";
         const string UiName     = "MyRconBlackMarket_UI";
 
         PluginConfig _cfg;
@@ -173,68 +173,27 @@ namespace Oxide.Plugins
 
         void SpawnSign(Market m, Quaternion rot)
         {
-            // Place the post sign beside the NPC, on the ground (a raised/floating
-            // sign has no support and topples). Keep it at the NPC's ground level.
-            Vector3 side = rot * new Vector3(1.2f, 0f, 0f);
+            // A vending machine shows a floating shop-name label natively — solid,
+            // reliable text with no image painting. Place it on the ground beside
+            // the NPC. (Players opening it find it empty; it's just a labelled marker.)
+            string label = !string.IsNullOrEmpty(m.SignText) ? m.SignText
+                : (!string.IsNullOrEmpty(m.Name) ? m.Name : "Black Market");
+            Vector3 side = rot * new Vector3(1.4f, 0f, 0f);
             var pos = new Vector3(m.X + side.x, m.Y, m.Z + side.z);
-            var sign = GameManager.server.CreateEntity(SignPrefab, pos, rot) as Signage;
-            if (sign == null) { PrintWarning("Failed to create Black Market sign (prefab missing?)."); return; }
-            sign.enableSaving = false;
-            sign.Spawn();
-            // Lock it down so it can't be picked up / knocked over
-            sign.SetFlag(BaseEntity.Flags.Locked, true);
-            var stability = sign.GetComponent<StabilityEntity>();
-            if (stability != null) stability.grounded = true;
-            _signs.Add(sign);
-            ApplySign(sign, m);
-        }
+            var ent = GameManager.server.CreateEntity(SignPrefab, pos, rot);
+            if (ent == null) { PrintWarning("Failed to create Black Market label prop."); return; }
+            ent.enableSaving = false;
+            ent.Spawn();
+            _signs.Add(ent);
 
-        // Paint the sign from a custom image URL if set, otherwise a generated
-        // text image. Downloads off-thread (no System.Drawing dependency).
-        void ApplySign(Signage sign, Market m)
-        {
-            if (sign == null) return;
-            string url;
-            if (!string.IsNullOrEmpty(m.SignImageUrl)) url = m.SignImageUrl;
-            else if (!string.IsNullOrEmpty(m.SignText)) url = "https://placehold.co/256x128/121412/8cd25a/png?text=" + Uri.EscapeDataString(m.SignText);
-            else return;
-
-            var netId = sign.net.ID;
-
-            System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+            var vm = ent as VendingMachine;
+            if (vm != null)
             {
-                byte[] data;
-                try
-                {
-                    using (var wc = new System.Net.WebClient())
-                    {
-                        wc.Headers.Add("User-Agent", "MyRconBlackMarket");
-                        data = wc.DownloadData(url);
-                    }
-                }
-                catch (Exception e)
-                {
-                    Interface.Oxide.NextTick(() => PrintWarning("Sign image download failed: " + e.Message));
-                    return;
-                }
-
-                Interface.Oxide.NextTick(() =>
-                {
-                    if (sign == null || sign.IsDestroyed || data == null || data.Length == 0) return;
-                    try
-                    {
-                        if (sign.textureIDs != null)
-                            for (int i = 0; i < sign.textureIDs.Length; i++)
-                                if (sign.textureIDs[i] != 0) { FileStorage.server.Remove(sign.textureIDs[i], FileStorage.Type.png, netId); sign.textureIDs[i] = 0; }
-                        uint id = FileStorage.server.Store(data, FileStorage.Type.png, netId);
-                        if (sign.textureIDs == null || sign.textureIDs.Length == 0) sign.textureIDs = new uint[1];
-                        sign.textureIDs[0] = id;
-                        sign.SetFlag(BaseEntity.Flags.Locked, true);
-                        sign.SendNetworkUpdate();
-                    }
-                    catch (Exception e) { PrintWarning("Failed to apply sign texture: " + e.Message); }
-                });
-            });
+                vm.shopName = label;
+                vm.SetFlag(BaseEntity.Flags.Reserved4, false); // don't broadcast a map marker
+                try { vm.UpdateMapMarker(); } catch { }
+                vm.SendNetworkUpdate();
+            }
         }
 
         void RespawnAll()
