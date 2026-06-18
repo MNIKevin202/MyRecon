@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("MyRconAdminPanel", "MyRcon", "1.9.11")]
+    [Info("MyRconAdminPanel", "MyRcon", "1.9.12")]
     [Description("MyRcon exclusive in-game admin dashboard")]
     public class MyRconAdminPanel : RustPlugin
     {
@@ -50,7 +50,7 @@ namespace Oxide.Plugins
         private const string CBtnOff     = "0.247 0.255 0.249 1";
         private const string CCooldown   = "0.55 0.40 0.12 1";
 
-        private const string PluginVersion = "1.9.11";
+        private const string PluginVersion = "1.9.12";
 
         // ── Rate limiting ─────────────────────────────────────────────────────
         private const double GiveCooldownSecs = 2.0;
@@ -61,77 +61,33 @@ namespace Oxide.Plugins
         private const int GridRows = 4;
         private const int PerPage  = GridCols * GridRows;
 
-        private static readonly Dictionary<string, List<string>> Categories =
-            new Dictionary<string, List<string>>
-        {
-            ["Weapons"] = new List<string> {
-                "rifle.ak","rifle.bolt","rifle.lr300","rifle.m39","rifle.semiauto",
-                "lmg.m249","smg.mp5","smg.thompson","smg.2",
-                "shotgun.pump","shotgun.spas12","shotgun.double","shotgun.waterpipe",
-                "pistol.m92","pistol.python","pistol.revolver","pistol.semiauto","pistol.eoka",
-                "bow.hunting","bow.compound","crossbow","rocket.launcher",
-                "multiplegrenadelauncher","flamethrower","knife.combat","mace","spear.wooden"
-            },
-            ["Ammo"] = new List<string> {
-                "ammo.rifle","ammo.rifle.explosive","ammo.rifle.hv","ammo.rifle.incendiary",
-                "ammo.pistol","ammo.pistol.hv","ammo.pistol.fire",
-                "ammo.shotgun","ammo.shotgun.slug","ammo.shotgun.fire","ammo.handmade.shell",
-                "arrow.wooden","arrow.hv","arrow.fire",
-                "ammo.rocket.basic","ammo.rocket.hv","ammo.rocket.fire",
-                "40mm.grenade.he","40mm.grenade.smoke"
-            },
-            ["Explosives"] = new List<string> {
-                "explosive.timed","explosive.satchel","grenade.f1","grenade.beancan",
-                "surveycharge","gunpowder","explosives"
-            },
-            ["Medical"] = new List<string> {
-                "syringe.medical","bandage","largemedkit","antiradpills"
-            },
-            ["Resources"] = new List<string> {
-                "wood","stones","metal.ore","sulfur.ore","hq.metal.ore",
-                "metal.fragments","sulfur","metal.refined",
-                "lowgradefuel","fat.animal","cloth","leather",
-                "bone.fragments","scrap","charcoal","crude.oil"
-            },
-            ["Components"] = new List<string> {
-                "gears","metalblade","metalspring","roadsigns","rope",
-                "riflebody","semibody","smgbody","techparts",
-                "tarp","sewingkit","sheetmetal","propanetank","piperifle"
-            },
-            ["Attire"] = new List<string> {
-                "metal.facemask","metal.plate.torso","roadsign.jacket","roadsign.kilt",
-                "hoodie","pants","shoes.boots","hat.helmet","riot.helmet",
-                "hazmatsuit","coffeecan.helmet","jacket","tactical.gloves","nightvisiongoggles"
-            },
-            ["Tools"] = new List<string> {
-                "hammer","building.planner","torch","flashlight.held",
-                "jackhammer","chainsaw","tool.camera","wiretool","hose.tool",
-                "stonehatchet","pickaxe","hatchet","icepick.salvaged"
-            },
-            ["Building"] = new List<string> {
-                "door.hinged.wood","door.hinged.metal","door.hinged.toptier",
-                "wall.frame.garagedoor","furnace","campfire",
-                "workbench1","workbench2","workbench3",
-                "box.wooden.large","lock.code","lock.key",
-                "furnace.large","refinery.small","turret","sleepingbag","bed"
-            },
-            ["Food"] = new List<string> {
-                "apple","blueberries","mushroom","corn","pumpkin",
-                "chicken.cooked","can.beans","can.tuna",
-                "water.bottle","water.jug","fish.cooked","bearmeat.cooked","wolfmeat.cooked"
-            },
-            ["Misc"] = new List<string> {
-                "key.card.green","key.card.blue","key.card.red",
-                "map","paper","supply.signal","targeting.computer","fun.guitar"
-            }
-        };
+        // Item catalogue is built at runtime from the game's full item list, so
+        // every item (including the Fun category) is available — same as F1.
+        private Dictionary<string, List<string>> Categories;
+        private List<string> AllCats;
+        private int TotalItemCount;
 
-        private static readonly List<string> AllCats;
-        private static readonly int TotalItemCount;
-        static MyRconAdminPanel() {
+        void EnsureCatalogue() {
+            if (Categories != null) return;
+            Categories = new Dictionary<string, List<string>>();
+            var nameMap = new Dictionary<string, string>();
+            foreach (var def in ItemManager.GetItemDefinitions()) {
+                if (def == null || string.IsNullOrEmpty(def.shortname)) continue;
+                string cat = def.category.ToString();
+                List<string> list;
+                if (!Categories.TryGetValue(cat, out list)) { list = new List<string>(); Categories[cat] = list; }
+                list.Add(def.shortname);
+                nameMap[def.shortname] = def.displayName != null && !string.IsNullOrEmpty(def.displayName.english)
+                    ? def.displayName.english : def.shortname;
+            }
+            foreach (var kv in Categories)
+                kv.Value.Sort((a, b) => string.Compare(
+                    nameMap.ContainsKey(a) ? nameMap[a] : a,
+                    nameMap.ContainsKey(b) ? nameMap[b] : b,
+                    StringComparison.OrdinalIgnoreCase));
             AllCats = new List<string> { "All" };
-            AllCats.AddRange(Categories.Keys);
-            TotalItemCount = Categories.Values.SelectMany(x => x).Count();
+            AllCats.AddRange(Categories.Keys.OrderBy(k => k));
+            TotalItemCount = Categories.Values.Sum(x => x.Count);
         }
 
         // ── Per-player state ──────────────────────────────────────────────────
@@ -187,6 +143,7 @@ namespace Oxide.Plugins
             if (!permission.UserHasPermission(p.UserIDString, PermUse)) {
                 SendReply(p, "<color=#F06A0F>MyRcon Admin Panel</color>: You don't have permission."); return;
             }
+            EnsureCatalogue();
             var s = Get(p); s.Screen = ScrPlayers;
             Draw(p, force: true);
         }
@@ -710,6 +667,7 @@ namespace Oxide.Plugins
         // ═══════════════════════════════════════════════════════════════════════
 
         void DrawGiveScreen(CuiElementContainer ui, S s, BasePlayer invoker) {
+            EnsureCatalogue();
             float xRight = s.Item != null ? 0.655f : 1f;
             bool hasSearch = !string.IsNullOrEmpty(s.SearchQuery);
 
@@ -1159,7 +1117,8 @@ namespace Oxide.Plugins
             return result;
         }
 
-        static List<string> ItemsFor(string cat) {
+        List<string> ItemsFor(string cat) {
+            EnsureCatalogue();
             if (cat == "All") return Categories.Values.SelectMany(x => x).ToList();
             return Categories.TryGetValue(cat, out var l) ? l : new List<string>();
         }
