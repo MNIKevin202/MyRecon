@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("MyRconAdminPanel", "MyRcon", "1.9.0")]
+    [Info("MyRconAdminPanel", "MyRcon", "1.9.1")]
     [Description("MyRcon exclusive in-game admin dashboard")]
     public class MyRconAdminPanel : RustPlugin
     {
@@ -289,6 +289,11 @@ namespace Oxide.Plugins
             var s = Get(p); var action = a.GetString(0);
             if (s.PlayerSel == 0) return;
             var tgt = BasePlayer.FindByID(s.PlayerSel);
+            // Guard self against destructive / pointless actions
+            if (tgt != null && tgt.userID == p.userID && (action == "kick" || action == "ban" || action == "teleport_to" || action == "teleport_here")) {
+                SendReply(p, "<color=#F06A0F>MyRcon</color>: You can't do that to yourself.");
+                return;
+            }
             switch (action) {
                 case "teleport_to":
                     if (tgt != null) { p.Teleport(tgt.transform.position); SendReply(p, string.Format("<color=#F06A0F>MyRcon</color>: Teleported to {0}.", tgt.displayName)); }
@@ -905,7 +910,7 @@ namespace Oxide.Plugins
                 string pingClr = ping < 80 ? "0.30 0.74 0.40 1" : ping < 150 ? "0.92 0.78 0.22 1" : "0.88 0.32 0.28 1";
                 ui.Add(new CuiLabel { Text = { Text = ping + "ms", FontSize = 10, Align = TextAnchor.MiddleRight, Color = pingClr, Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = "0.780 0", AnchorMax = "0.975 1" } }, rn);
 
-                if (!self) ui.Add(new CuiButton { Button = { Command = string.Format("mrap.psel {0}", pl.userID), Color = "0 0 0 0" }, RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1" }, Text = { Text = "" } }, rn);
+                ui.Add(new CuiButton { Button = { Command = string.Format("mrap.psel {0}", pl.userID), Color = "0 0 0 0" }, RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1" }, Text = { Text = "" } }, rn);
             }
 
             if (allPlayers.Count == 0)
@@ -967,13 +972,17 @@ namespace Oxide.Plugins
                 const float bGX = 0.020f; const float bGY = 0.010f;
                 float sY = 0.796f;
 
+                bool isSelf = sel2.userID == invoker.userID;
+
                 for (int i = 0; i < aCmds.Length; i++) {
                     int bc  = i % 2; int br = i / 2;
                     float ax0 = 0.028f + bc * (bW + bGX);
                     float ay1 = sY - br * (bH + bGY);
                     float ay0 = ay1 - bH;
                     string an = string.Format("MRAP_ACT{0}", i);
-                    bool disabled = aCmds[i].Length == 0;
+                    // Disable actions that don't make sense / are unsafe on yourself
+                    bool selfBlocked = isSelf && (aCmds[i] == "teleport_to" || aCmds[i] == "teleport_here" || aCmds[i] == "kick" || aCmds[i] == "ban");
+                    bool disabled = aCmds[i].Length == 0 || selfBlocked;
 
                     ui.Add(new CuiPanel { Image = { Color = aBg[i] }, RectTransform = { AnchorMin = string.Format("{0:F3} {1:F3}", ax0, ay0), AnchorMax = string.Format("{0:F3} {1:F3}", ax0 + bW, ay1) } }, actN, an);
                     ui.Add(new CuiPanel { Image = { Color = aAccent[i] }, RectTransform = { AnchorMin = "0 0", AnchorMax = "0.026 1" } }, an);
