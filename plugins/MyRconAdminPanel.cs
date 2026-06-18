@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("MyRconAdminPanel", "MyRcon", "1.9.3")]
+    [Info("MyRconAdminPanel", "MyRcon", "1.9.4")]
     [Description("MyRcon exclusive in-game admin dashboard")]
     public class MyRconAdminPanel : RustPlugin
     {
@@ -48,7 +48,7 @@ namespace Oxide.Plugins
         private const string CBtnOff     = "0.09 0.11 0.15 1";
         private const string CCooldown   = "0.55 0.18 0.08 1";
 
-        private const string PluginVersion = "1.9.3";
+        private const string PluginVersion = "1.9.4";
 
         // ── Rate limiting ─────────────────────────────────────────────────────
         private const double GiveCooldownSecs = 2.0;
@@ -499,40 +499,35 @@ namespace Oxide.Plugins
                 }
             });
 
-            // Tab bar — compact, always visible (Carbon Admin Centre style)
+            // Tab bar — full-width, Carbon Admin Centre style
             string[] tabScreens = { ScrPlayers, ScrGive, ScrServer };
             string[] tabLabels  = { "Players",  "Give Items", "Server" };
-            float tx = 0.100f; const float tw = 0.116f; const float tg = 0.006f;
+            const float tabStart = 0.095f; const float tabEnd = 0.840f; const float tg = 0.006f;
+            float tw = (tabEnd - tabStart) / tabScreens.Length;
             for (int t = 0; t < tabScreens.Length; t++) {
                 bool active = s.Screen == tabScreens[t] || (s.Screen == ScrHome && tabScreens[t] == ScrPlayers);
+                float x0 = tabStart + t * tw;
                 string tn = "MRAP_TAB" + t;
-                ui.Add(new CuiPanel { Image = { Color = active ? COrangeDeep : "0.072 0.090 0.124 1" }, RectTransform = { AnchorMin = string.Format("{0:F3} 0.14", tx), AnchorMax = string.Format("{0:F3} 0.86", tx + tw) } }, "MRAP_H", tn);
-                if (active) ui.Add(new CuiPanel { Image = { Color = COrange }, RectTransform = { AnchorMin = "0 0", AnchorMax = "1 0.10" } }, tn);
+                ui.Add(new CuiPanel {
+                    Image         = { Color = active ? "0.18 0.42 0.24 1" : "0.072 0.090 0.124 1" },
+                    RectTransform = { AnchorMin = string.Format("{0:F4} 0.10", x0), AnchorMax = string.Format("{0:F4} 0.90", x0 + tw - tg) }
+                }, "MRAP_H", tn);
+                if (active) ui.Add(new CuiPanel { Image = { Color = CGreen }, RectTransform = { AnchorMin = "0 0.86", AnchorMax = "1 1" } }, tn);
                 ui.Add(new CuiButton {
                     Button        = { Command = "mrap.nav " + tabScreens[t], Color = "0 0 0 0" },
                     RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1" },
-                    Text          = { Text = tabLabels[t], FontSize = 11, Align = TextAnchor.MiddleCenter, Color = active ? COrange : CMuted, Font = "robotocondensed-bold.ttf" }
-                }, "MRAP_H", tn + "_b");
-                tx += tw + tg;
+                    Text          = { Text = tabLabels[t], FontSize = 12, Align = TextAnchor.MiddleCenter, Color = active ? "1 1 1 1" : CMuted, Font = "robotocondensed-bold.ttf" }
+                }, tn);
             }
 
-            // Online badge
+            // Online indicator (compact)
             int online = BasePlayer.activePlayerList.Count;
             string onClr = online > 0 ? CGreen : CDim;
-            string onBg  = online > 0 ? "0.04 0.15 0.08 1" : "0.08 0.10 0.13 1";
-            ui.Add(new CuiPanel { Image = { Color = onBg }, RectTransform = { AnchorMin = "0.718 0.19", AnchorMax = "0.844 0.81" } }, "MRAP_H", "MRAP_OB");
-            ui.Add(new CuiPanel { Image = { Color = onClr }, RectTransform = { AnchorMin = "0.07 0.34", AnchorMax = "0.17 0.66" } }, "MRAP_OB");
+            ui.Add(new CuiPanel { Image = { Color = online > 0 ? "0.04 0.15 0.08 1" : "0.08 0.10 0.13 1" }, RectTransform = { AnchorMin = "0.847 0.20", AnchorMax = "0.933 0.80" } }, "MRAP_H", "MRAP_OB");
             ui.Add(new CuiLabel {
                 Text          = { Text = string.Format("{0} online", online), FontSize = 9, Align = TextAnchor.MiddleCenter, Color = onClr, Font = "robotocondensed-bold.ttf" },
-                RectTransform = { AnchorMin = "0.14 0", AnchorMax = "0.97 1" }
-            }, "MRAP_OB");
-
-            // Version badge
-            ui.Add(new CuiPanel { Image = { Color = COrangeDeep }, RectTransform = { AnchorMin = "0.850 0.19", AnchorMax = "0.929 0.81" } }, "MRAP_H", "MRAP_VB");
-            ui.Add(new CuiLabel {
-                Text          = { Text = "v" + PluginVersion, FontSize = 9, Align = TextAnchor.MiddleCenter, Color = COrange, Font = "robotocondensed-bold.ttf" },
                 RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1" }
-            }, "MRAP_VB");
+            }, "MRAP_OB");
 
             // Close button
             ui.Add(new CuiButton {
