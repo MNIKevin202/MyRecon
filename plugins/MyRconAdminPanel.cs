@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("MyRconAdminPanel", "MyRcon", "1.9.4")]
+    [Info("MyRconAdminPanel", "MyRcon", "1.9.5")]
     [Description("MyRcon exclusive in-game admin dashboard")]
     public class MyRconAdminPanel : RustPlugin
     {
@@ -24,31 +24,33 @@ namespace Oxide.Plugins
         private const string ScrServer  = "server";
 
         // ── Palette ───────────────────────────────────────────────────────────
-        private const string CBg         = "0.038 0.046 0.062 0.97";
-        private const string CHeader     = "0.024 0.030 0.042 1";
-        private const string CPanel      = "0.062 0.076 0.100 1";
-        private const string CCell       = "0.096 0.116 0.150 1";
-        private const string CCellSel    = "0.20 0.10 0.02 1";
-        private const string CDivider    = "1 1 1 0.07";
-        private const string COrange     = "0.94 0.42 0.07 1";
-        private const string COrangeDim  = "0.94 0.42 0.07 0.16";
-        private const string COrangeDeep = "0.22 0.10 0.02 1";
-        private const string CBlue       = "0.22 0.50 0.88 1";
-        private const string CBlueDim    = "0.22 0.50 0.88 0.16";
-        private const string CBlueDeep   = "0.04 0.10 0.22 1";
-        private const string CGreen      = "0.22 0.68 0.34 1";
-        private const string CGreenDim   = "0.22 0.68 0.34 0.16";
-        private const string CGreenDeep  = "0.04 0.14 0.07 1";
-        private const string CRed        = "0.78 0.20 0.14 1";
-        private const string CRedDim     = "0.78 0.20 0.14 0.18";
-        private const string CRedDeep    = "0.18 0.05 0.04 1";
-        private const string CText       = "0.95 0.96 0.98 1";
-        private const string CMuted      = "0.62 0.67 0.74 1";
-        private const string CDim        = "0.40 0.45 0.52 1";
-        private const string CBtnOff     = "0.09 0.11 0.15 1";
-        private const string CCooldown   = "0.55 0.18 0.08 1";
+        // ── Palette — Carbon Admin Centre style: flat dark grey + green accent ──
+        private const string CBg         = "0.145 0.155 0.170 0.985";
+        private const string CHeader     = "0.105 0.113 0.128 1";
+        private const string CPanel      = "0.176 0.188 0.208 1";
+        private const string CCell       = "0.216 0.230 0.252 1";
+        private const string CCellSel    = "0.135 0.255 0.155 1";
+        private const string CDivider    = "1 1 1 0.06";
+        // "Orange" names retained, but recolored to Carbon green (primary accent)
+        private const string COrange     = "0.38 0.64 0.33 1";
+        private const string COrangeDim  = "0.38 0.64 0.33 0.15";
+        private const string COrangeDeep = "0.135 0.245 0.150 1";
+        private const string CBlue       = "0.34 0.56 0.86 1";
+        private const string CBlueDim    = "0.34 0.56 0.86 0.15";
+        private const string CBlueDeep   = "0.10 0.18 0.30 1";
+        private const string CGreen      = "0.42 0.71 0.40 1";
+        private const string CGreenDim   = "0.42 0.71 0.40 0.15";
+        private const string CGreenDeep  = "0.135 0.245 0.150 1";
+        private const string CRed        = "0.82 0.34 0.30 1";
+        private const string CRedDim     = "0.82 0.34 0.30 0.16";
+        private const string CRedDeep    = "0.26 0.12 0.11 1";
+        private const string CText       = "0.92 0.94 0.96 1";
+        private const string CMuted      = "0.64 0.69 0.75 1";
+        private const string CDim        = "0.46 0.51 0.57 1";
+        private const string CBtnOff     = "0.205 0.218 0.240 1";
+        private const string CCooldown   = "0.55 0.40 0.12 1";
 
-        private const string PluginVersion = "1.9.4";
+        private const string PluginVersion = "1.9.5";
 
         // ── Rate limiting ─────────────────────────────────────────────────────
         private const double GiveCooldownSecs = 2.0;
@@ -445,9 +447,9 @@ namespace Oxide.Plugins
             CuiHelper.DestroyUi(player, UiMain);
             var ui = new CuiElementContainer();
 
-            // Thin orange glow border behind modal
+            // Thin accent glow border behind modal
             ui.Add(new CuiPanel {
-                Image         = { Color = "0.94 0.42 0.07 0.25" },
+                Image         = { Color = "0.38 0.64 0.33 0.22" },
                 RectTransform = { AnchorMin = "0.1490 0.0790", AnchorMax = "0.8510 0.9310" },
                 CursorEnabled = false
             }, "Overlay", UiShadow);
