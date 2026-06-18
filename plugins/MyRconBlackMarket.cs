@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("MyRconBlackMarket", "MyRcon", "1.3.1")]
+    [Info("MyRconBlackMarket", "MyRcon", "1.3.2")]
     [Description("Per-NPC Black Market shops with cloning, analytics, and buyer tracking.")]
     public class MyRconBlackMarket : RustPlugin
     {
@@ -188,41 +188,48 @@ namespace Oxide.Plugins
             if (!string.IsNullOrEmpty(m.SignText)) ApplySignText(sign, m.SignText);
         }
 
+        // Render text onto the sign by downloading a generated PNG from a public
+        // image service — no System.Drawing dependency (which Carbon may lack).
         void ApplySignText(Signage sign, string text)
         {
-            byte[] png;
-            try { png = RenderTextPng(text, 256, 128); }
-            catch (Exception e) { PrintWarning("Sign text could not be rendered on this server: " + e.Message); return; }
-            if (png == null) return;
-            try
-            {
-                if (sign.textureIDs != null)
-                    for (int i = 0; i < sign.textureIDs.Length; i++)
-                        if (sign.textureIDs[i] != 0) { FileStorage.server.Remove(sign.textureIDs[i], FileStorage.Type.png, sign.net.ID); sign.textureIDs[i] = 0; }
-                uint id = FileStorage.server.Store(png, FileStorage.Type.png, sign.net.ID);
-                if (sign.textureIDs == null || sign.textureIDs.Length == 0) sign.textureIDs = new uint[1];
-                sign.textureIDs[0] = id;
-                sign.SetFlag(BaseEntity.Flags.Locked, true);
-                sign.SendNetworkUpdate();
-            }
-            catch (Exception e) { PrintWarning("Failed to apply sign texture: " + e.Message); }
-        }
+            if (sign == null) return;
+            string url = "https://placehold.co/256x128/121412/8cd25a/png?text=" + Uri.EscapeDataString(text);
+            var netId = sign.net.ID;
 
-        byte[] RenderTextPng(string text, int w, int h)
-        {
-            using (var bmp = new System.Drawing.Bitmap(w, h))
-            using (var g = System.Drawing.Graphics.FromImage(bmp))
+            System.Threading.ThreadPool.QueueUserWorkItem(_ =>
             {
-                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-                g.Clear(System.Drawing.Color.FromArgb(18, 20, 18));
-                using (var font = new System.Drawing.Font("Arial", 26, System.Drawing.FontStyle.Bold))
-                using (var brush = new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(140, 210, 90)))
-                using (var sf = new System.Drawing.StringFormat { Alignment = System.Drawing.StringAlignment.Center, LineAlignment = System.Drawing.StringAlignment.Center })
+                byte[] data;
+                try
                 {
-                    g.DrawString(text, font, brush, new System.Drawing.RectangleF(4, 4, w - 8, h - 8), sf);
+                    using (var wc = new System.Net.WebClient())
+                    {
+                        wc.Headers.Add("User-Agent", "MyRconBlackMarket");
+                        data = wc.DownloadData(url);
+                    }
                 }
-                using (var ms = new System.IO.MemoryStream()) { bmp.Save(ms, System.Drawing.Imaging.ImageFormat.Png); return ms.ToArray(); }
-            }
+                catch (Exception e)
+                {
+                    Interface.Oxide.NextTick(() => PrintWarning("Sign image download failed: " + e.Message));
+                    return;
+                }
+
+                Interface.Oxide.NextTick(() =>
+                {
+                    if (sign == null || sign.IsDestroyed || data == null || data.Length == 0) return;
+                    try
+                    {
+                        if (sign.textureIDs != null)
+                            for (int i = 0; i < sign.textureIDs.Length; i++)
+                                if (sign.textureIDs[i] != 0) { FileStorage.server.Remove(sign.textureIDs[i], FileStorage.Type.png, netId); sign.textureIDs[i] = 0; }
+                        uint id = FileStorage.server.Store(data, FileStorage.Type.png, netId);
+                        if (sign.textureIDs == null || sign.textureIDs.Length == 0) sign.textureIDs = new uint[1];
+                        sign.textureIDs[0] = id;
+                        sign.SetFlag(BaseEntity.Flags.Locked, true);
+                        sign.SendNetworkUpdate();
+                    }
+                    catch (Exception e) { PrintWarning("Failed to apply sign texture: " + e.Message); }
+                });
+            });
         }
 
         void RespawnAll()
