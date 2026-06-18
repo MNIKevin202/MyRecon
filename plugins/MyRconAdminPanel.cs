@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("MyRconAdminPanel", "MyRcon", "1.9.9")]
+    [Info("MyRconAdminPanel", "MyRcon", "1.9.10")]
     [Description("MyRcon exclusive in-game admin dashboard")]
     public class MyRconAdminPanel : RustPlugin
     {
@@ -25,10 +25,10 @@ namespace Oxide.Plugins
 
         // ── Palette ───────────────────────────────────────────────────────────
         // ── Palette — matched to Carbon Admin Centre: flat grey + muted green ──
-        private const string CBg         = "0.243 0.251 0.243 1";   // solid, opaque grey (no game showing through)
-        private const string CHeader     = "0.188 0.196 0.188 1";
-        private const string CPanel      = "0.214 0.222 0.214 1";
-        private const string CCell       = "0.149 0.157 0.149 1";   // inset value fields / rows (darker)
+        private const string CBg         = "0.243 0.251 0.243 0.90";  // translucent grey
+        private const string CHeader     = "0.188 0.196 0.188 0.92";
+        private const string CPanel      = "0.214 0.222 0.214 0.90";
+        private const string CCell       = "0.149 0.157 0.149 0.94";  // inset value fields / rows (darker)
         private const string CCellSel    = "0.200 0.330 0.180 1";
         private const string CDivider    = "1 1 1 0.05";
         // "Orange" names retained, but recolored to Carbon's muted green (primary accent)
@@ -50,7 +50,7 @@ namespace Oxide.Plugins
         private const string CBtnOff     = "0.247 0.255 0.249 1";
         private const string CCooldown   = "0.55 0.40 0.12 1";
 
-        private const string PluginVersion = "1.9.9";
+        private const string PluginVersion = "1.9.10";
 
         // ── Rate limiting ─────────────────────────────────────────────────────
         private const double GiveCooldownSecs = 2.0;
@@ -506,14 +506,14 @@ namespace Oxide.Plugins
                 Parent = "MRAP_H",
                 Components = {
                     new CuiRawImageComponent { Url = "https://raw.githubusercontent.com/MNIKevin202/MyRecon/main/public/logo.png", Color = "1 1 1 1" },
-                    new CuiRectTransformComponent { AnchorMin = "0.004 0.060", AnchorMax = "0.090 0.940" }
+                    new CuiRectTransformComponent { AnchorMin = "0.006 0.020", AnchorMax = "0.122 0.980" }
                 }
             });
 
             // Tab bar — full-width, Carbon Admin Centre style
             string[] tabScreens = { ScrPlayers, ScrGive, ScrServer };
             string[] tabLabels  = { "Players",  "Give Items", "Server" };
-            const float tabStart = 0.095f; const float tabEnd = 0.840f; const float tg = 0.006f;
+            const float tabStart = 0.140f; const float tabEnd = 0.840f; const float tg = 0.006f;
             float tw = (tabEnd - tabStart) / tabScreens.Length;
             for (int t = 0; t < tabScreens.Length; t++) {
                 bool active = s.Screen == tabScreens[t] || (s.Screen == ScrHome && tabScreens[t] == ScrPlayers);
