@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("MyRconBlackMarket", "MyRcon", "1.5.1")]
+    [Info("MyRconBlackMarket", "MyRcon", "1.5.2")]
     [Description("Per-NPC Black Market shops with cloning, analytics, and buyer tracking.")]
     public class MyRconBlackMarket : RustPlugin
     {
@@ -178,16 +178,19 @@ namespace Oxide.Plugins
             // the NPC. (Players opening it find it empty; it's just a labelled marker.)
             string label = !string.IsNullOrEmpty(m.SignText) ? m.SignText
                 : (!string.IsNullOrEmpty(m.Name) ? m.Name : "Black Market");
-            Vector3 side = rot * new Vector3(1.4f, 0f, 0f);
+            Vector3 side = rot * new Vector3(2.0f, 0f, 0f);
             var pos = new Vector3(m.X + side.x, m.Y, m.Z + side.z);
             var ent = GameManager.server.CreateEntity(SignPrefab, pos, rot);
             if (ent == null) { PrintWarning("Failed to create Black Market label prop."); return; }
             ent.enableSaving = false;
+            // Remove the ground-watch components BEFORE spawn (synchronously) so the
+            // prop can't self-destruct when it's not on "valid" deploy ground.
+            foreach (var c in ent.GetComponentsInChildren<DestroyOnGroundMissing>(true)) UnityEngine.Object.DestroyImmediate(c);
+            foreach (var c in ent.GetComponentsInChildren<GroundWatch>(true))            UnityEngine.Object.DestroyImmediate(c);
             ent.Spawn();
-            // Strip the ground-watch components so the plugin-spawned prop doesn't
-            // self-destruct / collapse when it's not on "valid" deploy ground.
-            foreach (var c in ent.GetComponentsInChildren<DestroyOnGroundMissing>()) UnityEngine.Object.Destroy(c);
-            foreach (var c in ent.GetComponentsInChildren<GroundWatch>())            UnityEngine.Object.Destroy(c);
+            // And again after spawn, in case any were re-added during Spawn().
+            foreach (var c in ent.GetComponentsInChildren<DestroyOnGroundMissing>(true)) UnityEngine.Object.DestroyImmediate(c);
+            foreach (var c in ent.GetComponentsInChildren<GroundWatch>(true))            UnityEngine.Object.DestroyImmediate(c);
             _signs.Add(ent);
 
             var vm = ent as VendingMachine;
