@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("MyRconBlackMarket", "MyRcon", "1.3.2")]
+    [Info("MyRconBlackMarket", "MyRcon", "1.4.0")]
     [Description("Per-NPC Black Market shops with cloning, analytics, and buyer tracking.")]
     public class MyRconBlackMarket : RustPlugin
     {
@@ -39,6 +39,7 @@ namespace Oxide.Plugins
             public bool   ShowName          = false;
             public bool   Sign              = false;
             public string SignText          = "";
+            public string SignImageUrl      = "";
             public string CurrencyShortname = "scrap";
             public string CurrencyName      = "Scrap";
             public List<ShopItem> Items     = new List<ShopItem>();
@@ -185,15 +186,19 @@ namespace Oxide.Plugins
             var stability = sign.GetComponent<StabilityEntity>();
             if (stability != null) stability.grounded = true;
             _signs.Add(sign);
-            if (!string.IsNullOrEmpty(m.SignText)) ApplySignText(sign, m.SignText);
+            ApplySign(sign, m);
         }
 
-        // Render text onto the sign by downloading a generated PNG from a public
-        // image service — no System.Drawing dependency (which Carbon may lack).
-        void ApplySignText(Signage sign, string text)
+        // Paint the sign from a custom image URL if set, otherwise a generated
+        // text image. Downloads off-thread (no System.Drawing dependency).
+        void ApplySign(Signage sign, Market m)
         {
             if (sign == null) return;
-            string url = "https://placehold.co/256x128/121412/8cd25a/png?text=" + Uri.EscapeDataString(text);
+            string url;
+            if (!string.IsNullOrEmpty(m.SignImageUrl)) url = m.SignImageUrl;
+            else if (!string.IsNullOrEmpty(m.SignText)) url = "https://placehold.co/256x128/121412/8cd25a/png?text=" + Uri.EscapeDataString(m.SignText);
+            else return;
+
             var netId = sign.net.ID;
 
             System.Threading.ThreadPool.QueueUserWorkItem(_ =>
@@ -437,7 +442,7 @@ namespace Oxide.Plugins
             arg.ReplyWith(JsonConvert.SerializeObject(new {
                 markets = _data.Markets.Select((m, i) => new {
                     index = i, x = m.X, y = m.Y, z = m.Z, name = m.Name, showName = m.ShowName,
-                    sign = m.Sign, signText = m.SignText,
+                    sign = m.Sign, signText = m.SignText, signImageUrl = m.SignImageUrl,
                     currencyShortname = m.CurrencyShortname, currencyName = m.CurrencyName,
                     items = m.Items.Select((it, j) => new { index = j, shortname = it.Shortname, displayName = it.DisplayName, price = it.Price, amount = it.Amount }).ToList()
                 }).ToList()
@@ -470,6 +475,20 @@ namespace Oxide.Plugins
             _data.Markets[idx].SignText = a.Length > 2 ? string.Join(" ", a.Skip(2)) : "";
             SaveData();
             RespawnAll(); // re-place/re-text signs
+            arg.ReplyWith("{\"success\":true}");
+        }
+
+        [ConsoleCommand("bm.setsignimage")]
+        void CcSetSignImage(ConsoleSystem.Arg arg)
+        {
+            if (!IsServerCmd(arg)) return;
+            var a = GetArgs(arg);
+            if (a.Length < 1) { arg.ReplyWith("{\"error\":\"usage: bm.setsignimage <index> [url]\"}"); return; }
+            int idx = ParseInt(a[0], -1);
+            if (!ValidMarket(idx)) { arg.ReplyWith("{\"error\":\"bad index\"}"); return; }
+            _data.Markets[idx].SignImageUrl = a.Length > 1 ? a[1] : "";
+            SaveData();
+            RespawnAll();
             arg.ReplyWith("{\"success\":true}");
         }
 

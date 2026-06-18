@@ -17,7 +17,7 @@ type ShopItem = { index: number; shortname: string; displayName: string; price: 
 type Market = {
   index: number; x: number; y: number; z: number;
   name: string; showName: boolean;
-  sign: boolean; signText: string;
+  sign: boolean; signText: string; signImageUrl: string;
   currencyShortname: string; currencyName: string;
   items: ShopItem[];
 };
@@ -185,6 +185,7 @@ export function BlackMarketClient({ servers }: { servers: Server[] }) {
             <MarketCard key={m.index} market={m} allMarkets={markets} busy={busy}
               onSaveNpc={(name, showName) => act({ action: "setnpc", market: m.index, name, showName }, "Market updated.")}
               onSaveSign={(sign, text) => act({ action: "setsign", market: m.index, sign, text }, "Sign updated.")}
+              onSaveSignImage={(url) => act({ action: "setsignimage", market: m.index, url }, "Sign image updated.")}
               onSaveCurrency={(shortname, name) => act({ action: "setcurrency", market: m.index, shortname, name }, "Currency updated.")}
               onUpdateItem={(item, price, amount, name) => act({ action: "updateitem", market: m.index, item, price, amount, displayName: name }, "Item updated.")}
               onRemoveItem={(item) => act({ action: "removeitem", market: m.index, item }, "Item removed.")}
@@ -308,12 +309,13 @@ export function BlackMarketClient({ servers }: { servers: Server[] }) {
   );
 }
 
-function MarketCard({ market, allMarkets, busy, onSaveNpc, onSaveSign, onSaveCurrency, onUpdateItem, onRemoveItem, onAddItem, onClone, onRemove }: {
+function MarketCard({ market, allMarkets, busy, onSaveNpc, onSaveSign, onSaveSignImage, onSaveCurrency, onUpdateItem, onRemoveItem, onAddItem, onClone, onRemove }: {
   market: Market;
   allMarkets: Market[];
   busy: boolean;
   onSaveNpc: (name: string, showName: boolean) => void;
   onSaveSign: (sign: boolean, text: string) => void;
+  onSaveSignImage: (url: string) => void;
   onSaveCurrency: (shortname: string, name: string) => void;
   onUpdateItem: (item: number, price: string, amount: string, name: string) => void;
   onRemoveItem: (item: number) => void;
@@ -325,6 +327,7 @@ function MarketCard({ market, allMarkets, busy, onSaveNpc, onSaveSign, onSaveCur
   const [showName, setShowName] = useState(market.showName);
   const [sign, setSign] = useState(market.sign);
   const [signText, setSignText] = useState(market.signText);
+  const [signImageUrl, setSignImageUrl] = useState(market.signImageUrl);
   const [currency, setCurrency] = useState(market.currencyShortname);
 
   const title = market.name || `Market #${market.index}`;
@@ -368,9 +371,13 @@ function MarketCard({ market, allMarkets, busy, onSaveNpc, onSaveSign, onSaveCur
       {/* Sign */}
       <div className="mb-4 flex flex-wrap items-end gap-3 rounded-md border border-white/10 bg-black/20 px-3 py-2">
         <label className="flex items-center gap-2 pb-2 text-xs text-slate-300"><input type="checkbox" checked={sign} onChange={(e) => setSign(e.target.checked)} />Sign next to NPC</label>
-        <Field label="Sign text"><Input value={signText} onChange={(e) => setSignText(e.target.value)} placeholder="BLACK MARKET" className="w-56" disabled={!sign} /></Field>
+        <Field label="Sign text"><Input value={signText} onChange={(e) => setSignText(e.target.value)} placeholder="BLACK MARKET" className="w-56" disabled={!sign || !!signImageUrl} /></Field>
         <Button variant="secondary" onClick={() => onSaveSign(sign, signText)} disabled={busy} className="py-1 px-2 text-xs"><Save className="h-3.5 w-3.5" />Save Sign</Button>
-        <span className="pb-2 text-xs text-slate-500">Renders the text onto a sign placed beside the NPC.</span>
+        <div className="w-full" />
+        <Field label="Custom image URL (optional)" hint="Overrides the text. PNG/JPG, ideally 256×128.">
+          <Input value={signImageUrl} onChange={(e) => setSignImageUrl(e.target.value)} placeholder="https://…/banner.png" className="w-80" disabled={!sign} />
+        </Field>
+        <Button variant="secondary" onClick={() => onSaveSignImage(signImageUrl)} disabled={busy} className="py-1 px-2 text-xs"><Save className="h-3.5 w-3.5" />Save Image</Button>
       </div>
 
       {/* Items */}
