@@ -105,6 +105,68 @@ export function ServerManager({ initialServers }: { initialServers: Server[] }) 
     }
   }
 
+  // World Settings (startup params — seed/size)
+  const [worldSeed, setWorldSeed] = useState("");
+  const [worldSize, setWorldSize] = useState("");
+  const [worldBusy, setWorldBusy] = useState(false);
+
+  async function consoleCmd(command: string) {
+    return api<{ output: string }>(`/api/servers/${configServerId}/console`, {
+      method: "POST",
+      body: JSON.stringify({ command }),
+    });
+  }
+
+  async function loadWorld() {
+    if (!configServerId) { setMessage("Choose a server first."); return; }
+    setWorldBusy(true);
+    setMessage("Reading world settings...");
+    try {
+      const [seedRes, sizeRes] = await Promise.all([
+        consoleCmd("server.seed"),
+        consoleCmd("server.worldsize"),
+      ]);
+      const seed = (seedRes.output ?? "").match(/(\d+)/)?.[1];
+      const size = (sizeRes.output ?? "").match(/(\d+)/)?.[1];
+      if (seed) setWorldSeed(seed);
+      if (size) setWorldSize(size);
+      setMessage(`Current world: seed ${seed ?? "?"}, size ${size ?? "?"}.`);
+    } catch {
+      setMessage("Failed to read world settings. Check RCON connection.");
+    } finally {
+      setWorldBusy(false);
+    }
+  }
+
+  async function applyWorld() {
+    if (!configServerId) { setMessage("Choose a server first."); return; }
+    const seed = Number(worldSeed);
+    const size = Number(worldSize);
+    if (!Number.isInteger(seed) || seed < 0 || seed > 2147483647) {
+      setMessage("World seed must be a whole number between 0 and 2147483647.");
+      return;
+    }
+    if (!Number.isInteger(size) || size < 1000 || size > 6000) {
+      setMessage("World size must be a whole number between 1000 and 6000.");
+      return;
+    }
+    setWorldBusy(true);
+    setMessage("Applying world settings...");
+    try {
+      await consoleCmd(`server.seed ${seed}`);
+      await consoleCmd(`server.worldsize ${size}`);
+      let saved = false;
+      try { await consoleCmd("server.writecfg"); saved = true; } catch { /* best effort */ }
+      setMessage(
+        `World settings saved: seed ${seed}, size ${size}.${saved ? "" : " (config write not confirmed)"} Restart with a map wipe to apply.`,
+      );
+    } catch {
+      setMessage("Failed to apply world settings. Check RCON connection.");
+    } finally {
+      setWorldBusy(false);
+    }
+  }
+
   // Locked Crate Hack Timer
   const [crateSeconds, setCrateSeconds] = useState("900");
   const [crateCustom, setCrateCustom] = useState(false);
@@ -706,6 +768,48 @@ export function ServerManager({ initialServers }: { initialServers: Server[] }) 
 
           <p className="mt-3 text-xs text-amber-500/80">
             Runtime setting only. Reapply after a server restart unless it&apos;s saved to server.cfg (Apply runs server.writecfg to persist it).
+          </p>
+        </Panel>
+
+        <Panel>
+          <div className="mb-1 flex items-center gap-2">
+            <Settings2 className="h-5 w-5 text-sky-300" />
+            <h2 className="text-lg font-semibold">World Settings</h2>
+          </div>
+          <p className="mb-5 text-sm text-slate-400">Map seed and size for the server selected above.</p>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="World Seed" hint="Any whole number (0–2147483647).">
+              <Input
+                type="number"
+                value={worldSeed}
+                onChange={(event) => setWorldSeed(event.target.value)}
+                placeholder="e.g. 1915723344"
+              />
+            </Field>
+            <Field label="World Size" hint="Map size in metres (1000–6000). 3500 is common.">
+              <Input
+                type="number"
+                value={worldSize}
+                onChange={(event) => setWorldSize(event.target.value)}
+                placeholder="e.g. 3500"
+              />
+            </Field>
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-3">
+            <Button onClick={applyWorld} disabled={worldBusy || !configServerId}>
+              <Settings2 className="h-4 w-4" />Apply World Settings
+            </Button>
+            <Button variant="secondary" onClick={loadWorld} disabled={worldBusy || !configServerId}>
+              <Check className="h-4 w-4" />Show current
+            </Button>
+          </div>
+
+          <p className="mt-3 text-xs text-amber-500/80">
+            World Seed and World Size only take effect when the map is regenerated — a server restart with a map wipe.
+            If your host sets these via startup command-line arguments (e.g. <span className="font-mono">+server.seed</span>),
+            update them in your host&apos;s control panel too, since command-line args override server.cfg.
           </p>
         </Panel>
         </div>
