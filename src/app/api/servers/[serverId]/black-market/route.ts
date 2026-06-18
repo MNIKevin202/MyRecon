@@ -20,7 +20,11 @@ export async function GET(request: NextRequest, { params }: Params) {
   if (!server) return NextResponse.json({ error: "Server not found" }, { status: 404 });
 
   const type = new URL(request.url).searchParams.get("type") ?? "config";
-  const command = type === "npcs" ? "bm.getnpcs" : "bm.getconfig";
+  const command =
+    type === "npcs"      ? "bm.getnpcs"
+    : type === "analytics" ? "bm.getanalytics"
+    : type === "buyers"  ? "bm.getbuyers"
+    : "bm.getconfig";
 
   try {
     const raw = await executeServerCommand(server, command);
@@ -68,6 +72,9 @@ export async function POST(request: NextRequest, { params }: Params) {
       break;
     case "removenpc":
       command = `bm.removenpc ${s(b.index)}`;
+      break;
+    case "setnpc":
+      command = `bm.setnpc ${s(b.index)} ${b.showName ? "1" : "0"} ${s(b.name)}`.trim();
       break;
     default:
       return NextResponse.json({ error: "Unknown action" }, { status: 400 });
