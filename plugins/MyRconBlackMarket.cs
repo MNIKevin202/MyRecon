@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("MyRconBlackMarket", "MyRcon", "1.0.3")]
+    [Info("MyRconBlackMarket", "MyRcon", "1.0.4")]
     [Description("Interactable Black Market NPC shop — buy items with scrap. Invincible, non-combat NPCs placed by admins.")]
     public class MyRconBlackMarket : RustPlugin
     {
@@ -316,7 +316,7 @@ namespace Oxide.Plugins
         void CcAddItem(ConsoleSystem.Arg arg)
         {
             if (!IsServerCmd(arg)) return;
-            var a = arg.Args ?? new string[0];
+            var a = GetArgs(arg);
             if (a.Length < 3) { arg.ReplyWith("{\"error\":\"usage: bm.additem <shortname> <price> <amount> [name]\"}"); return; }
             var it = new ShopItem {
                 Shortname   = a[0],
@@ -333,7 +333,7 @@ namespace Oxide.Plugins
         void CcUpdateItem(ConsoleSystem.Arg arg)
         {
             if (!IsServerCmd(arg)) return;
-            var a = arg.Args ?? new string[0];
+            var a = GetArgs(arg);
             if (a.Length < 3) { arg.ReplyWith("{\"error\":\"usage: bm.updateitem <index> <price> <amount> [name]\"}"); return; }
             int idx = ParseInt(a[0], -1);
             if (idx < 0 || idx >= _cfg.Items.Count) { arg.ReplyWith("{\"error\":\"bad index\"}"); return; }
@@ -359,7 +359,7 @@ namespace Oxide.Plugins
         void CcSetCurrency(ConsoleSystem.Arg arg)
         {
             if (!IsServerCmd(arg)) return;
-            var a = arg.Args ?? new string[0];
+            var a = GetArgs(arg);
             if (a.Length < 1) { arg.ReplyWith("{\"error\":\"usage: bm.setcurrency <shortname> [name]\"}"); return; }
             _cfg.CurrencyShortname = a[0];
             _cfg.CurrencyName = a.Length > 1 ? string.Join(" ", a.Skip(1)) : a[0];
@@ -371,7 +371,7 @@ namespace Oxide.Plugins
         void CcPlaceNpc(ConsoleSystem.Arg arg)
         {
             if (!IsServerCmd(arg)) return;
-            var a = arg.Args ?? new string[0];
+            var a = GetArgs(arg);
             if (a.Length < 3) { arg.ReplyWith("{\"error\":\"usage: bm.placenpc <x> <y> <z> [yaw]\"}"); return; }
             float x = ParseFloat(a[0]), y = ParseFloat(a[1]), z = ParseFloat(a[2]);
             float yaw = a.Length > 3 ? ParseFloat(a[3]) : 0f;
@@ -392,6 +392,9 @@ namespace Oxide.Plugins
             RespawnAll();
             arg.ReplyWith("{\"success\":true}");
         }
+
+        static string[] GetArgs(ConsoleSystem.Arg arg) =>
+            arg.HasArgs() ? System.Array.ConvertAll(arg.Args, x => x.ToString()) : new string[0];
 
         static int   ParseInt(string s, int def)   { int v;   return int.TryParse(s, out v) ? v : def; }
         static float ParseFloat(string s)          { float v; return float.TryParse(s, out v) ? v : 0f; }
