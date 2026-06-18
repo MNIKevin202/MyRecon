@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("MyRconAdminPanel", "MyRcon", "1.9.7")]
+    [Info("MyRconAdminPanel", "MyRcon", "1.9.8")]
     [Description("MyRcon exclusive in-game admin dashboard")]
     public class MyRconAdminPanel : RustPlugin
     {
@@ -50,7 +50,7 @@ namespace Oxide.Plugins
         private const string CBtnOff     = "0.247 0.255 0.249 1";
         private const string CCooldown   = "0.55 0.40 0.12 1";
 
-        private const string PluginVersion = "1.9.7";
+        private const string PluginVersion = "1.9.8";
 
         // ── Rate limiting ─────────────────────────────────────────────────────
         private const double GiveCooldownSecs = 2.0;
