@@ -1,9 +1,38 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Coins, MapPin, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Coins, MapPin, Plus, RefreshCw, Save, Search, Trash2, X } from "lucide-react";
 import { Button, Field, Input, Panel, Select } from "@/components/ui";
-import { api } from "@/lib/utils";
+import { api, clsx } from "@/lib/utils";
+import {
+  ITEM_CATEGORIES,
+  type ItemCategory,
+  type RustItem,
+  itemImageUrl,
+  itemsByCategory,
+} from "@/lib/rust-items";
+
+const CURRENCIES = [
+  { shortname: "scrap", name: "Scrap" },
+  { shortname: "metal.fragments", name: "Metal Fragments" },
+  { shortname: "metal.refined", name: "High Quality Metal" },
+  { shortname: "lowgradefuel", name: "Low Grade Fuel" },
+  { shortname: "wood", name: "Wood" },
+  { shortname: "stones", name: "Stones" },
+  { shortname: "cloth", name: "Cloth" },
+  { shortname: "sulfur", name: "Sulfur" },
+];
+
+function ItemImg({ shortname, name, size = 44 }: { shortname: string; name: string; size?: number }) {
+  const [err, setErr] = useState(false);
+  if (err)
+    return (
+      <div style={{ width: size, height: size }} className="flex items-center justify-center rounded bg-white/[0.04] px-0.5 text-center text-[9px] leading-tight text-slate-500">
+        {name.slice(0, 5)}
+      </div>
+    );
+  return <img src={itemImageUrl(shortname)} alt={name} onError={() => setErr(true)} style={{ width: size, height: size }} className="object-contain" loading="lazy" />;
+}
 
 type Server = { id: string; name: string; isDefault: boolean };
 
@@ -28,11 +57,21 @@ export function BlackMarketClient({ servers }: { servers: Server[] }) {
   const [curShort, setCurShort] = useState("scrap");
   const [curName, setCurName] = useState("Scrap");
 
-  // new item form
-  const [niShort, setNiShort] = useState("");
-  const [niName, setNiName] = useState("");
-  const [niPrice, setNiPrice] = useState("100");
-  const [niAmount, setNiAmount] = useState("1");
+  // catalog + configure popup
+  const [catalogOpen, setCatalogOpen] = useState(false);
+  const [catSearch, setCatSearch] = useState("");
+  const [catCategory, setCatCategory] = useState<ItemCategory>("All");
+  const [picked, setPicked] = useState<RustItem | null>(null);
+  const [cfgPrice, setCfgPrice] = useState("100");
+  const [cfgAmount, setCfgAmount] = useState("1");
+  const [cfgCurrency, setCfgCurrency] = useState("scrap");
+
+  const catalogItems = useMemo(() => {
+    const base = itemsByCategory(catCategory);
+    const q = catSearch.trim().toLowerCase();
+    if (!q) return base;
+    return base.filter((i) => i.name.toLowerCase().includes(q) || i.shortname.toLowerCase().includes(q));
+  }, [catCategory, catSearch]);
 
   // place npc form
   const [npX, setNpX] = useState("");
@@ -60,6 +99,46 @@ export function BlackMarketClient({ servers }: { servers: Server[] }) {
   }, [serverId]);
 
   useEffect(() => { void load(); }, [load]);
+
+  function openCatalog() {
+    setCfgCurrency(config?.currencyShortname ?? "scrap");
+    setPicked(null);
+    setCatSearch("");
+    setCatCategory("All");
+    setCatalogOpen(true);
+  }
+
+  function pickItem(it: RustItem) {
+    setPicked(it);
+    setCfgPrice("100");
+    setCfgAmount("1");
+  }
+
+  async function addFromCatalog() {
+    if (!picked || !serverId) return;
+    setBusy(true);
+    try {
+      if (config && cfgCurrency !== config.currencyShortname) {
+        const cur = CURRENCIES.find((c) => c.shortname === cfgCurrency);
+        await api(`/api/servers/${serverId}/black-market`, {
+          method: "POST",
+          body: JSON.stringify({ action: "setcurrency", shortname: cfgCurrency, name: cur?.name ?? cfgCurrency }),
+        });
+      }
+      await api(`/api/servers/${serverId}/black-market`, {
+        method: "POST",
+        body: JSON.stringify({ action: "additem", shortname: picked.shortname, displayName: picked.name, price: cfgPrice, amount: cfgAmount }),
+      });
+      setNotice(`Added ${picked.name} to the shop.`);
+      setPicked(null);
+      setCatalogOpen(false);
+      await load();
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : "Add failed");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function act(body: Record<string, unknown>, ok: string) {
     setBusy(true);
@@ -135,19 +214,9 @@ export function BlackMarketClient({ servers }: { servers: Server[] }) {
 
             {/* Add item */}
             <div className="mt-4 border-t border-white/10 pt-4">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Add item</p>
-              <div className="flex flex-wrap items-end gap-3">
-                <Field label="Shortname"><Input value={niShort} onChange={(e) => setNiShort(e.target.value)} placeholder="rifle.ak" className="font-mono" /></Field>
-                <Field label="Display name"><Input value={niName} onChange={(e) => setNiName(e.target.value)} placeholder="Optional" /></Field>
-                <Field label="Price"><Input type="number" value={niPrice} onChange={(e) => setNiPrice(e.target.value)} className="w-24" /></Field>
-                <Field label="Amount"><Input type="number" value={niAmount} onChange={(e) => setNiAmount(e.target.value)} className="w-24" /></Field>
-                <Button
-                  onClick={() => { if (niShort.trim()) void act({ action: "additem", shortname: niShort.trim(), price: niPrice, amount: niAmount, displayName: niName }, "Item added."); }}
-                  disabled={busy || !niShort.trim()}
-                >
-                  <Plus className="h-4 w-4" />Add
-                </Button>
-              </div>
+              <Button onClick={openCatalog} disabled={busy}>
+                <Plus className="h-4 w-4" />Add Item from Catalog
+              </Button>
             </div>
           </Panel>
 
@@ -186,6 +255,92 @@ export function BlackMarketClient({ servers }: { servers: Server[] }) {
             </div>
           </Panel>
         </>
+      )}
+
+      {catalogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setCatalogOpen(false)}>
+          <div className="flex max-h-[85vh] w-full max-w-3xl flex-col rounded-xl border border-white/10 bg-[#0d1117] shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+              <h2 className="text-lg font-semibold text-white">{picked ? "Configure Sale" : "Add Item — Catalog"}</h2>
+              <button onClick={() => setCatalogOpen(false)} className="text-slate-400 hover:text-white"><X className="h-4 w-4" /></button>
+            </div>
+
+            {!picked ? (
+              <>
+                <div className="flex flex-wrap items-center gap-2 border-b border-white/10 px-4 py-3">
+                  <div className="relative flex-1 min-w-48">
+                    <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
+                    <input
+                      type="search"
+                      placeholder="Search items…"
+                      value={catSearch}
+                      onChange={(e) => setCatSearch(e.target.value)}
+                      className="w-full rounded-md border border-white/10 bg-white/[0.04] py-1.5 pl-8 pr-3 text-sm text-slate-100 placeholder-slate-500 outline-none focus:border-emerald-400"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-1 overflow-x-auto border-b border-white/10 px-4 py-2">
+                  {ITEM_CATEGORIES.map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => setCatCategory(c)}
+                      className={clsx(
+                        "shrink-0 rounded-md px-2.5 py-1 text-xs font-medium transition",
+                        catCategory === c ? "bg-emerald-600/25 text-emerald-100" : "text-slate-400 hover:bg-white/[0.06] hover:text-white",
+                      )}
+                    >
+                      {c}
+                    </button>
+                  ))}
+                </div>
+                <div className="grid flex-1 grid-cols-3 gap-2 overflow-y-auto p-4 sm:grid-cols-4 md:grid-cols-6">
+                  {catalogItems.map((it) => (
+                    <button
+                      key={it.shortname}
+                      onClick={() => pickItem(it)}
+                      className="flex flex-col items-center gap-1 rounded-lg border border-white/[0.06] bg-white/[0.03] p-2 text-center transition hover:border-emerald-500/50 hover:bg-white/[0.06]"
+                    >
+                      <ItemImg shortname={it.shortname} name={it.name} />
+                      <span className="w-full truncate text-[10px] text-slate-400">{it.name}</span>
+                    </button>
+                  ))}
+                  {catalogItems.length === 0 ? <p className="col-span-full py-8 text-center text-sm text-slate-600">No items found.</p> : null}
+                </div>
+              </>
+            ) : (
+              <div className="grid gap-4 p-5">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-md bg-white/[0.05]">
+                    <ItemImg shortname={picked.shortname} name={picked.name} size={48} />
+                  </div>
+                  <div>
+                    <p className="text-base font-semibold text-white">{picked.name}</p>
+                    <p className="font-mono text-xs text-slate-500">{picked.shortname}</p>
+                  </div>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <Field label="Price"><Input type="number" value={cfgPrice} onChange={(e) => setCfgPrice(e.target.value)} /></Field>
+                  <Field label="Amount per purchase"><Input type="number" value={cfgAmount} onChange={(e) => setCfgAmount(e.target.value)} /></Field>
+                  <Field label="Currency">
+                    <Select value={cfgCurrency} onChange={(e) => setCfgCurrency(e.target.value)}>
+                      {CURRENCIES.some((c) => c.shortname === cfgCurrency) ? null : <option value={cfgCurrency}>{cfgCurrency}</option>}
+                      {CURRENCIES.map((c) => <option key={c.shortname} value={c.shortname}>{c.name}</option>)}
+                    </Select>
+                  </Field>
+                </div>
+                {config && cfgCurrency !== config.currencyShortname ? (
+                  <p className="text-xs text-amber-500/80">Changing the currency applies to the whole shop (it&apos;s a single shared currency).</p>
+                ) : null}
+                <div className="flex flex-wrap justify-end gap-2">
+                  <Button variant="secondary" onClick={() => setPicked(null)}>Back to catalog</Button>
+                  <Button onClick={addFromCatalog} disabled={busy}>
+                    <Plus className="h-4 w-4" />Add to Shop
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
