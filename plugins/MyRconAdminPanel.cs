@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("MyRconAdminPanel", "MyRcon", "1.9.2")]
+    [Info("MyRconAdminPanel", "MyRcon", "1.9.3")]
     [Description("MyRcon exclusive in-game admin dashboard")]
     public class MyRconAdminPanel : RustPlugin
     {
@@ -48,7 +48,7 @@ namespace Oxide.Plugins
         private const string CBtnOff     = "0.09 0.11 0.15 1";
         private const string CCooldown   = "0.55 0.18 0.08 1";
 
-        private const string PluginVersion = "1.9.2";
+        private const string PluginVersion = "1.9.3";
 
         // ── Rate limiting ─────────────────────────────────────────────────────
         private const double GiveCooldownSecs = 2.0;
@@ -869,7 +869,7 @@ namespace Oxide.Plugins
         //  PLAYERS SCREEN
         // ═══════════════════════════════════════════════════════════════════════
 
-        private const int PlayersPerPage = 10;
+        private const int PlayersPerPage = 12;
 
         void DrawPlayersScreen(CuiElementContainer ui, S s, BasePlayer invoker) {
             var allPlayers  = BasePlayer.activePlayerList.OrderBy(p => p.displayName).ToList();
@@ -886,7 +886,7 @@ namespace Oxide.Plugins
             ui.Add(new CuiLabel { Text = { Text = "PING", FontSize = 9, Align = TextAnchor.MiddleRight, Color = CDim, Font = "robotocondensed-bold.ttf" }, RectTransform = { AnchorMin = "0.780 0.942", AnchorMax = "0.980 1" } }, listN);
             ui.Add(new CuiPanel { Image = { Color = CDivider }, RectTransform = { AnchorMin = "0 0.934", AnchorMax = "1 0.940" } }, listN);
 
-            const float rH = 0.084f; const float rG = 0.007f;
+            const float rH = 0.068f; const float rG = 0.0065f;
             for (int i = 0; i < pagePlayers.Count; i++) {
                 var pl    = pagePlayers[i];
                 bool self = pl.userID == invoker.userID;
