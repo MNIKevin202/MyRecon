@@ -16,6 +16,7 @@ import {
   Lock,
   LogOut,
   MessageSquare,
+  Store,
   PlugZap,
   Recycle,
   ScanSearch,
@@ -58,6 +59,7 @@ const navSections: NavSection[] = [
       { href: "/exclusive-plugins",  label: "Exclusive Plugins", icon: Lock },
       { href: "/reclaim",            label: "Reclaim",           icon: Recycle },
       { href: "/structure-iq",       label: "StructureIQ",       icon: ScanSearch },
+      { href: "/black-market",       label: "Black Market",      icon: Store },
     ],
   },
 ];

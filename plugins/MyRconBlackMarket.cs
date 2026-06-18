@@ -1,13 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Newtonsoft.Json;
 using Oxide.Core;
 using Oxide.Game.Rust.Cui;
 using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("MyRconBlackMarket", "MyRcon", "1.0.0")]
+    [Info("MyRconBlackMarket", "MyRcon", "1.0.1")]
     [Description("Interactable Black Market NPC shop — buy items with scrap. Invincible, non-combat NPCs placed by admins.")]
     public class MyRconBlackMarket : RustPlugin
     {
@@ -268,6 +269,131 @@ namespace Oxide.Plugins
         {
             if (player != null) CuiHelper.DestroyUi(player, UiName);
         }
+
+        // ── RCON console commands (MyRCON Black Market panel) ─────────────────────
+        bool IsServerCmd(ConsoleSystem.Arg arg)
+        {
+            if (arg.IsRcon) return true;
+            var p = arg.Player();
+            return p == null || p.IsAdmin || permission.UserHasPermission(p.UserIDString, PermAdmin);
+        }
+
+        void RespawnAll()
+        {
+            foreach (var e in _npcs.ToList())
+                if (e != null && !e.IsDestroyed) e.Kill();
+            _npcs.Clear();
+            foreach (var n in _data.Npcs)
+                SpawnNpc(new Vector3(n.X, n.Y, n.Z), Quaternion.Euler(0f, n.Yaw, 0f));
+        }
+
+        [ConsoleCommand("bm.getconfig")]
+        void CcGetConfig(ConsoleSystem.Arg arg)
+        {
+            if (!IsServerCmd(arg)) return;
+            arg.ReplyWith(JsonConvert.SerializeObject(new {
+                currencyShortname = _cfg.CurrencyShortname,
+                currencyName      = _cfg.CurrencyName,
+                interactDistance  = _cfg.InteractDistance,
+                requireUsePermission = _cfg.RequireUsePermission,
+                items = _cfg.Items.Select((it, i) => new {
+                    index = i, shortname = it.Shortname, displayName = it.DisplayName, price = it.Price, amount = it.Amount
+                }).ToList()
+            }));
+        }
+
+        [ConsoleCommand("bm.getnpcs")]
+        void CcGetNpcs(ConsoleSystem.Arg arg)
+        {
+            if (!IsServerCmd(arg)) return;
+            arg.ReplyWith(JsonConvert.SerializeObject(new {
+                npcs = _data.Npcs.Select((n, i) => new { index = i, x = n.X, y = n.Y, z = n.Z, yaw = n.Yaw }).ToList()
+            }));
+        }
+
+        [ConsoleCommand("bm.additem")]
+        void CcAddItem(ConsoleSystem.Arg arg)
+        {
+            if (!IsServerCmd(arg)) return;
+            var a = arg.Args ?? new string[0];
+            if (a.Length < 3) { arg.ReplyWith("{\"error\":\"usage: bm.additem <shortname> <price> <amount> [name]\"}"); return; }
+            var it = new ShopItem {
+                Shortname   = a[0],
+                Price       = ParseInt(a[1], 100),
+                Amount      = ParseInt(a[2], 1),
+                DisplayName = a.Length > 3 ? string.Join(" ", a.Skip(3)) : ""
+            };
+            _cfg.Items.Add(it);
+            SaveConfig();
+            arg.ReplyWith("{\"success\":true}");
+        }
+
+        [ConsoleCommand("bm.updateitem")]
+        void CcUpdateItem(ConsoleSystem.Arg arg)
+        {
+            if (!IsServerCmd(arg)) return;
+            var a = arg.Args ?? new string[0];
+            if (a.Length < 3) { arg.ReplyWith("{\"error\":\"usage: bm.updateitem <index> <price> <amount> [name]\"}"); return; }
+            int idx = ParseInt(a[0], -1);
+            if (idx < 0 || idx >= _cfg.Items.Count) { arg.ReplyWith("{\"error\":\"bad index\"}"); return; }
+            _cfg.Items[idx].Price  = ParseInt(a[1], _cfg.Items[idx].Price);
+            _cfg.Items[idx].Amount = ParseInt(a[2], _cfg.Items[idx].Amount);
+            if (a.Length > 3) _cfg.Items[idx].DisplayName = string.Join(" ", a.Skip(3));
+            SaveConfig();
+            arg.ReplyWith("{\"success\":true}");
+        }
+
+        [ConsoleCommand("bm.removeitem")]
+        void CcRemoveItem(ConsoleSystem.Arg arg)
+        {
+            if (!IsServerCmd(arg)) return;
+            int idx = arg.GetInt(0, -1);
+            if (idx < 0 || idx >= _cfg.Items.Count) { arg.ReplyWith("{\"error\":\"bad index\"}"); return; }
+            _cfg.Items.RemoveAt(idx);
+            SaveConfig();
+            arg.ReplyWith("{\"success\":true}");
+        }
+
+        [ConsoleCommand("bm.setcurrency")]
+        void CcSetCurrency(ConsoleSystem.Arg arg)
+        {
+            if (!IsServerCmd(arg)) return;
+            var a = arg.Args ?? new string[0];
+            if (a.Length < 1) { arg.ReplyWith("{\"error\":\"usage: bm.setcurrency <shortname> [name]\"}"); return; }
+            _cfg.CurrencyShortname = a[0];
+            _cfg.CurrencyName = a.Length > 1 ? string.Join(" ", a.Skip(1)) : a[0];
+            SaveConfig();
+            arg.ReplyWith("{\"success\":true}");
+        }
+
+        [ConsoleCommand("bm.placenpc")]
+        void CcPlaceNpc(ConsoleSystem.Arg arg)
+        {
+            if (!IsServerCmd(arg)) return;
+            var a = arg.Args ?? new string[0];
+            if (a.Length < 3) { arg.ReplyWith("{\"error\":\"usage: bm.placenpc <x> <y> <z> [yaw]\"}"); return; }
+            float x = ParseFloat(a[0]), y = ParseFloat(a[1]), z = ParseFloat(a[2]);
+            float yaw = a.Length > 3 ? ParseFloat(a[3]) : 0f;
+            _data.Npcs.Add(new NpcPos { X = x, Y = y, Z = z, Yaw = yaw });
+            SaveData();
+            SpawnNpc(new Vector3(x, y, z), Quaternion.Euler(0f, yaw, 0f));
+            arg.ReplyWith("{\"success\":true}");
+        }
+
+        [ConsoleCommand("bm.removenpc")]
+        void CcRemoveNpc(ConsoleSystem.Arg arg)
+        {
+            if (!IsServerCmd(arg)) return;
+            int idx = arg.GetInt(0, -1);
+            if (idx < 0 || idx >= _data.Npcs.Count) { arg.ReplyWith("{\"error\":\"bad index\"}"); return; }
+            _data.Npcs.RemoveAt(idx);
+            SaveData();
+            RespawnAll();
+            arg.ReplyWith("{\"success\":true}");
+        }
+
+        static int   ParseInt(string s, int def)   { int v;   return int.TryParse(s, out v) ? v : def; }
+        static float ParseFloat(string s)          { float v; return float.TryParse(s, out v) ? v : 0f; }
 
         // ── Currency helpers ──────────────────────────────────────────────────────
         int CurrencyAmount(BasePlayer p)
