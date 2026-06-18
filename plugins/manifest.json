@@ -1,6 +1,6 @@
 {
   "admin-panel": {
-    "version": "1.9.5",
+    "version": "1.9.6",
     "contentUrl": "https://raw.githubusercontent.com/MNIKevin202/MyRecon/main/plugins/MyRconAdminPanel.cs",
     "name": "Admin Panel",
     "description": "In-game admin dashboard with a navigation home screen. Give Items, Players (teleport/heal/kick/ban), and Server quick commands.",

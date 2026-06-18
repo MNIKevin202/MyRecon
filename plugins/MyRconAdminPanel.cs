@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("MyRconAdminPanel", "MyRcon", "1.9.5")]
+    [Info("MyRconAdminPanel", "MyRcon", "1.9.6")]
     [Description("MyRcon exclusive in-game admin dashboard")]
     public class MyRconAdminPanel : RustPlugin
     {
@@ -24,33 +24,33 @@ namespace Oxide.Plugins
         private const string ScrServer  = "server";
 
         // ── Palette ───────────────────────────────────────────────────────────
-        // ── Palette — Carbon Admin Centre style: flat dark grey + green accent ──
-        private const string CBg         = "0.145 0.155 0.170 0.985";
-        private const string CHeader     = "0.105 0.113 0.128 1";
-        private const string CPanel      = "0.176 0.188 0.208 1";
-        private const string CCell       = "0.216 0.230 0.252 1";
-        private const string CCellSel    = "0.135 0.255 0.155 1";
-        private const string CDivider    = "1 1 1 0.06";
-        // "Orange" names retained, but recolored to Carbon green (primary accent)
-        private const string COrange     = "0.38 0.64 0.33 1";
-        private const string COrangeDim  = "0.38 0.64 0.33 0.15";
-        private const string COrangeDeep = "0.135 0.245 0.150 1";
+        // ── Palette — matched to Carbon Admin Centre: flat grey + muted green ──
+        private const string CBg         = "0.212 0.220 0.214 0.985";
+        private const string CHeader     = "0.169 0.176 0.171 1";
+        private const string CPanel      = "0.247 0.255 0.249 1";
+        private const string CCell       = "0.149 0.157 0.152 1";   // inset value fields (darker)
+        private const string CCellSel    = "0.200 0.330 0.180 1";
+        private const string CDivider    = "1 1 1 0.05";
+        // "Orange" names retained, but recolored to Carbon's muted green (primary accent)
+        private const string COrange     = "0.34 0.56 0.27 1";
+        private const string COrangeDim  = "0.34 0.56 0.27 0.16";
+        private const string COrangeDeep = "0.18 0.28 0.15 1";
         private const string CBlue       = "0.34 0.56 0.86 1";
         private const string CBlueDim    = "0.34 0.56 0.86 0.15";
-        private const string CBlueDeep   = "0.10 0.18 0.30 1";
-        private const string CGreen      = "0.42 0.71 0.40 1";
-        private const string CGreenDim   = "0.42 0.71 0.40 0.15";
-        private const string CGreenDeep  = "0.135 0.245 0.150 1";
-        private const string CRed        = "0.82 0.34 0.30 1";
-        private const string CRedDim     = "0.82 0.34 0.30 0.16";
-        private const string CRedDeep    = "0.26 0.12 0.11 1";
-        private const string CText       = "0.92 0.94 0.96 1";
-        private const string CMuted      = "0.64 0.69 0.75 1";
-        private const string CDim        = "0.46 0.51 0.57 1";
-        private const string CBtnOff     = "0.205 0.218 0.240 1";
+        private const string CBlueDeep   = "0.12 0.20 0.30 1";
+        private const string CGreen      = "0.46 0.78 0.37 1";       // bright check/accent
+        private const string CGreenDim   = "0.46 0.78 0.37 0.15";
+        private const string CGreenDeep  = "0.18 0.28 0.15 1";
+        private const string CRed        = "0.80 0.33 0.29 1";
+        private const string CRedDim     = "0.80 0.33 0.29 0.16";
+        private const string CRedDeep    = "0.26 0.13 0.12 1";
+        private const string CText       = "0.92 0.93 0.92 1";
+        private const string CMuted      = "0.64 0.67 0.64 1";
+        private const string CDim        = "0.48 0.51 0.48 1";
+        private const string CBtnOff     = "0.247 0.255 0.249 1";
         private const string CCooldown   = "0.55 0.40 0.12 1";
 
-        private const string PluginVersion = "1.9.5";
+        private const string PluginVersion = "1.9.6";
 
         // ── Rate limiting ─────────────────────────────────────────────────────
         private const double GiveCooldownSecs = 2.0;
@@ -488,8 +488,8 @@ namespace Oxide.Plugins
                 RectTransform = { AnchorMin = "0 0.945", AnchorMax = "1 1" }
             }, UiMain, "MRAP_H");
 
-            // Full-width orange bottom line
-            ui.Add(new CuiPanel { Image = { Color = COrange }, RectTransform = { AnchorMin = "0 0", AnchorMax = "1 0.046" } }, "MRAP_H");
+            // Subtle bottom divider under the header (Carbon-style, not a bold bar)
+            ui.Add(new CuiPanel { Image = { Color = CDivider }, RectTransform = { AnchorMin = "0 0", AnchorMax = "1 0.030" } }, "MRAP_H");
 
             // Logo image
             ui.Add(new CuiElement {
@@ -510,11 +510,11 @@ namespace Oxide.Plugins
                 bool active = s.Screen == tabScreens[t] || (s.Screen == ScrHome && tabScreens[t] == ScrPlayers);
                 float x0 = tabStart + t * tw;
                 string tn = "MRAP_TAB" + t;
+                // Carbon style: active tab is a solid green fill, inactive is bare.
                 ui.Add(new CuiPanel {
-                    Image         = { Color = active ? "0.18 0.42 0.24 1" : "0.072 0.090 0.124 1" },
-                    RectTransform = { AnchorMin = string.Format("{0:F4} 0.10", x0), AnchorMax = string.Format("{0:F4} 0.90", x0 + tw - tg) }
+                    Image         = { Color = active ? COrange : "0 0 0 0" },
+                    RectTransform = { AnchorMin = string.Format("{0:F4} 0.04", x0), AnchorMax = string.Format("{0:F4} 0.96", x0 + tw - tg) }
                 }, "MRAP_H", tn);
-                if (active) ui.Add(new CuiPanel { Image = { Color = CGreen }, RectTransform = { AnchorMin = "0 0.86", AnchorMax = "1 1" } }, tn);
                 ui.Add(new CuiButton {
                     Button        = { Command = "mrap.nav " + tabScreens[t], Color = "0 0 0 0" },
                     RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1" },
