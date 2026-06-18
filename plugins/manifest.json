@@ -15,6 +15,18 @@
       "metal.refined", "scrap", "ammo.rifle", "grenade.f1"
     ]
   },
+  "black-market": {
+    "version": "1.0.0",
+    "contentUrl": "https://raw.githubusercontent.com/MNIKevin202/MyRecon/main/plugins/MyRconBlackMarket.cs",
+    "name": "Black Market",
+    "description": "Interactable Black Market NPC shop. Place an invincible, non-combat vendor NPC; players press USE to open a shop and buy items with scrap.",
+    "longDescription": "Spawns a stationary bandit-shopkeeper-style NPC that can't be killed and won't fight back. Players press USE on the NPC to open the Black Market UI and buy configurable items with scrap (or any currency item you set). Admins place NPCs where they stand with /blackmarket place and remove the nearest with /blackmarket remove — placements persist across restarts. Shop items, prices, amounts and the currency are all editable in the config.",
+    "tags": ["Economy", "NPC", "Shop", "Admin"],
+    "filename": "MyRconBlackMarket.cs",
+    "defaultPath": "carbon/plugins/MyRconBlackMarket.cs",
+    "permissions": ["myrconblackmarket.admin", "myrconblackmarket.use"],
+    "previewItems": ["scrap", "rifle.ak", "explosive.timed", "targeting.computer"]
+  },
   "noclip": {
     "version": "1.0.0",
     "contentUrl": "https://raw.githubusercontent.com/MNIKevin202/MyRecon/main/plugins/MyRconNoClip.cs",
