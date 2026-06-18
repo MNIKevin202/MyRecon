@@ -156,19 +156,19 @@ function GivePanel({
                       className={clsx(
                         "flex items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm transition",
                         selected
-                          ? "bg-orange-500/20 text-orange-100"
+                          ? "bg-emerald-600/25 text-emerald-100"
                           : "hover:bg-white/[0.06] text-slate-300",
                       )}
                     >
                       <div className={clsx(
                         "flex h-4 w-4 shrink-0 items-center justify-center rounded border transition",
-                        selected ? "border-orange-400 bg-orange-500" : "border-white/20",
+                        selected ? "border-emerald-400 bg-emerald-600" : "border-white/20",
                       )}>
                         {selected && <Check className="h-2.5 w-2.5 text-white" />}
                       </div>
                       <span className="flex-1 truncate">{p.name}</span>
                       {isInvoker && (
-                        <span className="shrink-0 rounded bg-orange-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-orange-300">
+                        <span className="shrink-0 rounded bg-emerald-600/25 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-300">
                           You
                         </span>
                       )}
@@ -190,7 +190,7 @@ function GivePanel({
                   className={clsx(
                     "rounded-md border px-2 py-1.5 text-xs font-medium capitalize transition",
                     amountMode === mode
-                      ? "border-orange-400 bg-orange-500/20 text-orange-100"
+                      ? "border-emerald-400 bg-emerald-600/25 text-emerald-100"
                       : "border-white/10 text-slate-400 hover:border-white/20 hover:text-white",
                   )}
                 >
@@ -217,7 +217,7 @@ function GivePanel({
                   value={customInput}
                   onChange={(e) => setCustomInput(e.target.value)}
                   placeholder="Amount"
-                  className="flex-1 rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-center text-sm text-white outline-none focus:border-orange-400"
+                  className="flex-1 rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-center text-sm text-white outline-none focus:border-emerald-400"
                 />
                 <button
                   onClick={() => {
@@ -335,7 +335,7 @@ export function AdminPanelClient({
       <Panel>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <Gift className="h-5 w-5 text-orange-400" />
+            <Gift className="h-5 w-5 text-emerald-400" />
             <h2 className="text-base font-semibold text-white">Give Item</h2>
           </div>
           <div className="relative">
@@ -345,7 +345,7 @@ export function AdminPanelClient({
               placeholder="Search items…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-44 rounded-md border border-white/10 bg-white/[0.04] py-1.5 pl-8 pr-3 text-sm text-slate-100 placeholder-slate-500 outline-none focus:border-orange-400 sm:w-56"
+              className="w-44 rounded-md border border-white/10 bg-white/[0.04] py-1.5 pl-8 pr-3 text-sm text-slate-100 placeholder-slate-500 outline-none focus:border-emerald-400 sm:w-56"
             />
           </div>
         </div>
@@ -359,7 +359,7 @@ export function AdminPanelClient({
               className={clsx(
                 "shrink-0 rounded-md px-3 py-1.5 text-xs font-medium transition",
                 category === cat
-                  ? "bg-orange-500/20 text-orange-200"
+                  ? "bg-emerald-600/25 text-emerald-100"
                   : "text-slate-400 hover:bg-white/[0.06] hover:text-white",
               )}
             >
@@ -385,8 +385,8 @@ export function AdminPanelClient({
                   className={clsx(
                     "group flex flex-col items-center gap-1.5 rounded-lg border p-2.5 text-center transition",
                     active
-                      ? "border-orange-400/60 bg-orange-500/10"
-                      : "border-white/[0.06] bg-white/[0.02] hover:border-white/20 hover:bg-white/[0.05]",
+                      ? "border-emerald-500/60 bg-emerald-500/15"
+                      : "border-white/[0.06] bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]",
                   )}
                 >
                   <div className="flex h-12 w-12 items-center justify-center">
@@ -394,11 +394,11 @@ export function AdminPanelClient({
                   </div>
                   <p className={clsx(
                     "w-full truncate text-[10px] leading-tight transition",
-                    active ? "text-orange-200" : "text-slate-400 group-hover:text-slate-200",
+                    active ? "text-emerald-200" : "text-slate-400 group-hover:text-slate-200",
                   )}>
                     {item.name}
                   </p>
-                  {active && <ChevronRight className="h-3 w-3 text-orange-400" />}
+                  {active && <ChevronRight className="h-3 w-3 text-emerald-400" />}
                 </button>
               );
             })}
