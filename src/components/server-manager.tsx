@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Copy, Download, Pencil, Plus, Power, Star, Trash2 } from "lucide-react";
+import { Check, Copy, Download, Pencil, Plus, Power, Settings2, Star, Trash2 } from "lucide-react";
 import { Button, Field, Input, Panel, Select } from "@/components/ui";
 import { api, clsx } from "@/lib/utils";
 
@@ -48,7 +48,9 @@ const blank = {
   sftpAllowOutsideRoot: false,
 };
 
-type Tab = "saved" | "add" | "copy";
+type Tab = "saved" | "add" | "copy" | "config";
+
+type ConfigField = { key: string; label: string; type: "string" | "text" | "number" | "bool"; hint?: string };
 
 export function ServerManager({ initialServers }: { initialServers: Server[] }) {
   const [servers, setServers] = useState(initialServers);
@@ -57,6 +59,54 @@ export function ServerManager({ initialServers }: { initialServers: Server[] }) 
   const [form, setForm] = useState(blank);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // Server Config tab state
+  const [configServerId, setConfigServerId] = useState(
+    initialServers.find((s) => s.isDefault)?.id ?? initialServers[0]?.id ?? "",
+  );
+  const [configFields, setConfigFields] = useState<ConfigField[]>([]);
+  const [configValues, setConfigValues] = useState<Record<string, string>>({});
+  const [configBusy, setConfigBusy] = useState(false);
+
+  async function loadConfig() {
+    if (!configServerId) {
+      setMessage("Choose a server to load its config.");
+      return;
+    }
+    setConfigBusy(true);
+    setMessage("Reading server config...");
+    try {
+      const data = await api<{ fields: ConfigField[]; values: Record<string, string> }>(
+        `/api/servers/${configServerId}/config`,
+      );
+      setConfigFields(data.fields);
+      setConfigValues(data.values);
+      setMessage("Loaded current server config.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not read server config");
+    } finally {
+      setConfigBusy(false);
+    }
+  }
+
+  async function saveConfig() {
+    if (!configServerId) return;
+    setConfigBusy(true);
+    setMessage("Saving server config...");
+    try {
+      const data = await api<{ applied: string[]; configSaved: boolean }>(`/api/servers/${configServerId}/config`, {
+        method: "POST",
+        body: JSON.stringify({ values: configValues }),
+      });
+      setMessage(
+        `Applied ${data.applied.length} setting(s). ${data.configSaved ? "Config written to disk." : "Config write not confirmed."}`,
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not save server config");
+    } finally {
+      setConfigBusy(false);
+    }
+  }
 
   // Copy Plugins tab state
   const [copySource, setCopySource] = useState("");
@@ -279,6 +329,7 @@ export function ServerManager({ initialServers }: { initialServers: Server[] }) 
   const tabs: { id: Tab; label: string }[] = [
     { id: "saved", label: "Saved Servers" },
     { id: "add", label: editing ? "Edit Server" : "Add a Server" },
+    { id: "config", label: "Server Config" },
     { id: "copy", label: "Copy Plugins" },
   ];
 
@@ -454,6 +505,72 @@ export function ServerManager({ initialServers }: { initialServers: Server[] }) 
             </div>
           </Panel>
         </div>
+      )}
+
+      {tab === "config" && (
+        <Panel className="max-w-2xl">
+          <div className="mb-1 flex items-center gap-2">
+            <Settings2 className="h-5 w-5 text-orange-300" />
+            <h2 className="text-lg font-semibold">Server Config</h2>
+          </div>
+          <p className="mb-5 text-sm text-slate-400">
+            Rename the server and edit common settings. Changes are applied live over RCON and written to the
+            server config (server.writecfg) so they persist across restarts.
+          </p>
+          <div className="grid gap-4">
+            <div className="flex flex-wrap items-end gap-3">
+              <Field label="Server">
+                <Select value={configServerId} onChange={(event) => setConfigServerId(event.target.value)}>
+                  <option value="">Select a server…</option>
+                  {servers.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </Select>
+              </Field>
+              <Button variant="secondary" onClick={loadConfig} disabled={configBusy || !configServerId}>
+                <Check className="h-4 w-4" />Load from server
+              </Button>
+            </div>
+
+            {configFields.length > 0 && (
+              <div className="grid gap-4">
+                {configFields.map((field) => (
+                  <Field key={field.key} label={field.label} hint={field.hint}>
+                    {field.type === "bool" ? (
+                      <label className="flex items-center gap-2 text-sm text-slate-300">
+                        <input
+                          type="checkbox"
+                          checked={configValues[field.key] === "true" || configValues[field.key] === "True"}
+                          onChange={(event) =>
+                            setConfigValues((c) => ({ ...c, [field.key]: event.target.checked ? "true" : "false" }))
+                          }
+                        />
+                        Enabled
+                      </label>
+                    ) : field.type === "text" ? (
+                      <textarea
+                        className="min-h-20 rounded-md border border-white/10 bg-white/[0.04] p-3 text-sm text-slate-100 outline-none focus:border-orange-400"
+                        value={configValues[field.key] ?? ""}
+                        onChange={(event) => setConfigValues((c) => ({ ...c, [field.key]: event.target.value }))}
+                      />
+                    ) : (
+                      <Input
+                        type={field.type === "number" ? "number" : "text"}
+                        value={configValues[field.key] ?? ""}
+                        onChange={(event) => setConfigValues((c) => ({ ...c, [field.key]: event.target.value }))}
+                      />
+                    )}
+                  </Field>
+                ))}
+                <div>
+                  <Button onClick={saveConfig} disabled={configBusy}>
+                    <Settings2 className="h-4 w-4" />Save to server
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </Panel>
       )}
 
       {tab === "copy" && (
