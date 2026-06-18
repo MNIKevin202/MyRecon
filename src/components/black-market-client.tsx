@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BarChart3, Coins, MapPin, Plus, RefreshCw, Save, Search, Store, Trash2, Users, X } from "lucide-react";
+import { BarChart3, Copy, MapPin, Plus, RefreshCw, Save, Search, Store, Trash2, Users, X } from "lucide-react";
 import { Button, Field, Input, Panel, Select } from "@/components/ui";
 import { api, clsx } from "@/lib/utils";
 import {
@@ -14,15 +14,20 @@ import {
 
 type Server = { id: string; name: string; isDefault: boolean };
 type ShopItem = { index: number; shortname: string; displayName: string; price: number; amount: number };
-type Config = { currencyShortname: string; currencyName: string; items: ShopItem[]; error?: string };
-type Npc = { index: number; x: number; y: number; z: number; yaw: number; name: string; showName: boolean };
-type AnalyticsItem = { shortname: string; displayName: string; price: number; amount: number; count: number; qty: number; revenue: number; suggestion: string };
-type Analytics = { currencyName: string; totalSales: number; totalRevenue: number; items: AnalyticsItem[]; error?: string };
+type Market = {
+  index: number; x: number; y: number; z: number;
+  name: string; showName: boolean;
+  currencyShortname: string; currencyName: string;
+  items: ShopItem[];
+};
+type MarketsResp = { markets: Market[]; error?: string };
+type AnalyticsItem = { shortname: string; displayName: string; count: number; qty: number; revenue: number; suggestion: string };
+type Analytics = { totalSales: number; totalRevenue: number; items: AnalyticsItem[]; error?: string };
 type Buyer = { steamId: string; name: string; purchases: number; spent: number };
 type Looker = { steamId: string; name: string; opens: number };
 type Buyers = { buyers: Buyer[]; lookers: Looker[]; error?: string };
 
-type Tab = "items" | "markets" | "analytics" | "buyers";
+type Tab = "markets" | "analytics" | "buyers";
 
 const CURRENCIES = [
   { shortname: "scrap", name: "Scrap" },
@@ -45,31 +50,26 @@ function ItemImg({ shortname, name, size = 44 }: { shortname: string; name: stri
 export function BlackMarketClient({ servers }: { servers: Server[] }) {
   const def = servers.find((s) => s.isDefault) ?? servers[0];
   const [serverId, setServerId] = useState(def?.id ?? "");
-  const [tab, setTab] = useState<Tab>("items");
+  const [tab, setTab] = useState<Tab>("markets");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const [config, setConfig] = useState<Config | null>(null);
-  const [npcs, setNpcs] = useState<Npc[]>([]);
+  const [markets, setMarkets] = useState<Market[] | null>(null);
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [buyers, setBuyers] = useState<Buyers | null>(null);
-
-  const [curShort, setCurShort] = useState("scrap");
-  const [curName, setCurName] = useState("Scrap");
-
-  // catalog + configure popup
-  const [catalogOpen, setCatalogOpen] = useState(false);
-  const [catSearch, setCatSearch] = useState("");
-  const [catCategory, setCatCategory] = useState<ItemCategory>("All");
-  const [picked, setPicked] = useState<RustItem | null>(null);
-  const [cfgPrice, setCfgPrice] = useState("100");
-  const [cfgAmount, setCfgAmount] = useState("1");
-  const [cfgCurrency, setCfgCurrency] = useState("scrap");
 
   // place npc form
   const [npX, setNpX] = useState("");
   const [npY, setNpY] = useState("");
   const [npZ, setNpZ] = useState("");
+
+  // catalog (scoped to a market)
+  const [catalogMarket, setCatalogMarket] = useState<number | null>(null);
+  const [catSearch, setCatSearch] = useState("");
+  const [catCategory, setCatCategory] = useState<ItemCategory>("All");
+  const [picked, setPicked] = useState<RustItem | null>(null);
+  const [cfgPrice, setCfgPrice] = useState("100");
+  const [cfgAmount, setCfgAmount] = useState("1");
 
   const catalogItems = useMemo(() => {
     const base = itemsByCategory(catCategory);
@@ -78,15 +78,11 @@ export function BlackMarketClient({ servers }: { servers: Server[] }) {
     return base.filter((i) => i.name.toLowerCase().includes(q) || i.shortname.toLowerCase().includes(q));
   }, [catCategory, catSearch]);
 
-  const loadConfig = useCallback(async () => {
+  const loadMarkets = useCallback(async () => {
     if (!serverId) return;
-    const cfg = await api<Config>(`/api/servers/${serverId}/black-market?type=config`);
-    if (cfg.error) { setNotice(cfg.error); setConfig(null); return; }
-    setConfig(cfg);
-    setCurShort(cfg.currencyShortname);
-    setCurName(cfg.currencyName);
-    const n = await api<{ npcs: Npc[] }>(`/api/servers/${serverId}/black-market?type=npcs`);
-    setNpcs(n.npcs ?? []);
+    const m = await api<MarketsResp>(`/api/servers/${serverId}/black-market?type=markets`);
+    if (m.error) { setNotice(m.error); setMarkets(null); return; }
+    setMarkets(m.markets ?? []);
   }, [serverId]);
 
   const loadTab = useCallback(async () => {
@@ -100,14 +96,12 @@ export function BlackMarketClient({ servers }: { servers: Server[] }) {
         const b = await api<Buyers>(`/api/servers/${serverId}/black-market?type=buyers`);
         if (b.error) setNotice(b.error); else setBuyers(b);
       } else {
-        await loadConfig();
+        await loadMarkets();
       }
     } catch (e) {
       setNotice(e instanceof Error ? e.message : "Failed to load data");
-    } finally {
-      setBusy(false);
-    }
-  }, [serverId, tab, loadConfig]);
+    } finally { setBusy(false); }
+  }, [serverId, tab, loadMarkets]);
 
   useEffect(() => { void loadTab(); }, [loadTab]);
 
@@ -117,39 +111,24 @@ export function BlackMarketClient({ servers }: { servers: Server[] }) {
       const res = await api<{ success?: boolean; error?: string }>(`/api/servers/${serverId}/black-market`, { method: "POST", body: JSON.stringify(body) });
       if (res.error) { setNotice(res.error); return; }
       setNotice(ok);
-      await loadTab();
+      await loadMarkets();
     } catch (e) {
       setNotice(e instanceof Error ? e.message : "Action failed");
-    } finally {
-      setBusy(false);
-    }
+    } finally { setBusy(false); }
   }
 
-  function openCatalog() {
-    setCfgCurrency(config?.currencyShortname ?? "scrap");
-    setPicked(null); setCatSearch(""); setCatCategory("All"); setCatalogOpen(true);
+  function openCatalog(marketIndex: number) {
+    setCatalogMarket(marketIndex); setPicked(null); setCatSearch(""); setCatCategory("All");
   }
   function pickItem(it: RustItem) { setPicked(it); setCfgPrice("100"); setCfgAmount("1"); }
 
   async function addFromCatalog() {
-    if (!picked || !serverId) return;
-    setBusy(true);
-    try {
-      if (config && cfgCurrency !== config.currencyShortname) {
-        const cur = CURRENCIES.find((c) => c.shortname === cfgCurrency);
-        await api(`/api/servers/${serverId}/black-market`, { method: "POST", body: JSON.stringify({ action: "setcurrency", shortname: cfgCurrency, name: cur?.name ?? cfgCurrency }) });
-      }
-      await api(`/api/servers/${serverId}/black-market`, { method: "POST", body: JSON.stringify({ action: "additem", shortname: picked.shortname, displayName: picked.name, price: cfgPrice, amount: cfgAmount }) });
-      setNotice(`Added ${picked.name} to the shop.`);
-      setPicked(null); setCatalogOpen(false);
-      await loadConfig();
-    } catch (e) {
-      setNotice(e instanceof Error ? e.message : "Add failed");
-    } finally { setBusy(false); }
+    if (!picked || catalogMarket == null) return;
+    await act({ action: "additem", market: catalogMarket, shortname: picked.shortname, displayName: picked.name, price: cfgPrice, amount: cfgAmount }, `Added ${picked.name}.`);
+    setPicked(null); setCatalogMarket(null);
   }
 
   const tabs: { id: Tab; label: string; icon: typeof Store }[] = [
-    { id: "items",     label: "Shop Items", icon: Store },
     { id: "markets",   label: "Markets",    icon: MapPin },
     { id: "analytics", label: "Analytics",  icon: BarChart3 },
     { id: "buyers",    label: "Buyers",     icon: Users },
@@ -160,7 +139,7 @@ export function BlackMarketClient({ servers }: { servers: Server[] }) {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white">Black Market</h1>
-          <p className="mt-1 text-sm text-slate-400">Shop, vendor NPCs, sales analytics, and buyers.</p>
+          <p className="mt-1 text-sm text-slate-400">Per-NPC shops, analytics, and buyers.</p>
         </div>
         <div className="flex gap-3">
           <Select value={serverId} onChange={(e) => setServerId(e.target.value)} className="min-w-56">
@@ -183,77 +162,54 @@ export function BlackMarketClient({ servers }: { servers: Server[] }) {
 
       {notice ? <div className="rounded-md border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-slate-200">{notice}</div> : null}
 
-      {/* ITEMS TAB */}
-      {tab === "items" && (!config ? (
-        <Panel><p className="text-sm text-slate-500">No data. Install <span className="text-emerald-400">Black Market</span> via Exclusive Plugins and make sure it&apos;s loaded, then Refresh.</p></Panel>
+      {/* MARKETS TAB */}
+      {tab === "markets" && (markets == null ? (
+        <Panel><p className="text-sm text-slate-500">No data. Install <span className="text-emerald-400">Black Market</span> via Exclusive Plugins, make sure it&apos;s loaded, then Refresh.</p></Panel>
       ) : (
         <>
           <Panel>
-            <div className="mb-3 flex items-center gap-2"><Coins className="h-5 w-5 text-emerald-400" /><h2 className="text-lg font-semibold text-white">Currency</h2></div>
-            <div className="flex flex-wrap items-end gap-3">
-              <Field label="Item shortname"><Input value={curShort} onChange={(e) => setCurShort(e.target.value)} className="font-mono" /></Field>
-              <Field label="Display name"><Input value={curName} onChange={(e) => setCurName(e.target.value)} /></Field>
-              <Button onClick={() => act({ action: "setcurrency", shortname: curShort, name: curName }, "Currency updated.")} disabled={busy}><Save className="h-4 w-4" />Save</Button>
-            </div>
-          </Panel>
-          <Panel>
-            <h2 className="mb-3 text-lg font-semibold text-white">Shop Items ({config.items.length})</h2>
-            <div className="grid gap-2">
-              {config.items.map((it) => (
-                <ItemRow key={it.index} item={it} busy={busy}
-                  onSave={(price, amount, name) => act({ action: "updateitem", index: it.index, price, amount, displayName: name }, "Item updated.")}
-                  onRemove={() => act({ action: "removeitem", index: it.index }, "Item removed.")} />
-              ))}
-              {config.items.length === 0 ? <p className="text-sm text-slate-500">No items yet — add one below.</p> : null}
-            </div>
-            <div className="mt-4 border-t border-white/10 pt-4">
-              <Button onClick={openCatalog} disabled={busy}><Plus className="h-4 w-4" />Add Item from Catalog</Button>
-            </div>
-          </Panel>
-        </>
-      ))}
-
-      {/* MARKETS TAB */}
-      {tab === "markets" && (
-        <Panel>
-          <div className="mb-3 flex items-center gap-2"><MapPin className="h-5 w-5 text-emerald-400" /><h2 className="text-lg font-semibold text-white">Vendor NPCs ({npcs.length})</h2></div>
-          <div className="grid gap-2">
-            {npcs.map((n) => (
-              <NpcRow key={n.index} npc={n} busy={busy}
-                onSave={(name, showName) => act({ action: "setnpc", index: n.index, name, showName }, "NPC updated.")}
-                onRemove={() => act({ action: "removenpc", index: n.index }, "NPC removed.")} />
-            ))}
-            {npcs.length === 0 ? <p className="text-sm text-slate-500">No NPCs placed. Use <span className="font-mono">/bm place</span> in-game, or add by coordinates below.</p> : null}
-          </div>
-          <div className="mt-4 border-t border-white/10 pt-4">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Place NPC by coordinates</p>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Place a new market by coordinates</p>
             <div className="flex flex-wrap items-end gap-3">
               <Field label="X"><Input type="number" value={npX} onChange={(e) => setNpX(e.target.value)} className="w-28" /></Field>
               <Field label="Y"><Input type="number" value={npY} onChange={(e) => setNpY(e.target.value)} className="w-28" /></Field>
               <Field label="Z"><Input type="number" value={npZ} onChange={(e) => setNpZ(e.target.value)} className="w-28" /></Field>
-              <Button onClick={() => { if (npX && npY && npZ) void act({ action: "placenpc", x: npX, y: npY, z: npZ }, "NPC placed."); }} disabled={busy || !npX || !npY || !npZ}><MapPin className="h-4 w-4" />Place</Button>
+              <Button onClick={() => { if (npX && npY && npZ) void act({ action: "placenpc", x: npX, y: npY, z: npZ }, "Market placed."); }} disabled={busy || !npX || !npY || !npZ}><MapPin className="h-4 w-4" />Place</Button>
+              <span className="text-xs text-slate-500">or use <span className="font-mono">/bm place</span> in-game</span>
             </div>
-            <p className="mt-2 text-xs text-slate-500">Tip: in-game <span className="font-mono">/bm place</span> uses your exact position.</p>
-          </div>
-        </Panel>
-      )}
+          </Panel>
+
+          {markets.length === 0 ? (
+            <Panel><p className="text-sm text-slate-500">No markets yet. Place one above or with <span className="font-mono">/bm place</span>.</p></Panel>
+          ) : markets.map((m) => (
+            <MarketCard key={m.index} market={m} allMarkets={markets} busy={busy}
+              onSaveNpc={(name, showName) => act({ action: "setnpc", market: m.index, name, showName }, "Market updated.")}
+              onSaveCurrency={(shortname, name) => act({ action: "setcurrency", market: m.index, shortname, name }, "Currency updated.")}
+              onUpdateItem={(item, price, amount, name) => act({ action: "updateitem", market: m.index, item, price, amount, displayName: name }, "Item updated.")}
+              onRemoveItem={(item) => act({ action: "removeitem", market: m.index, item }, "Item removed.")}
+              onAddItem={() => openCatalog(m.index)}
+              onClone={(dst) => act({ action: "clone", src: m.index, dst }, "Shop cloned.")}
+              onRemove={() => act({ action: "removenpc", market: m.index }, "Market removed.")}
+            />
+          ))}
+        </>
+      ))}
 
       {/* ANALYTICS TAB */}
       {tab === "analytics" && (
         <>
           <div className="grid gap-4 sm:grid-cols-2">
             <Panel><div className="text-sm text-slate-400">Total Sales</div><div className="mt-2 text-2xl font-bold text-white">{analytics?.totalSales ?? 0}</div></Panel>
-            <Panel><div className="text-sm text-slate-400">Total Revenue ({analytics?.currencyName ?? "currency"})</div><div className="mt-2 text-2xl font-bold text-emerald-400">{(analytics?.totalRevenue ?? 0).toLocaleString()}</div></Panel>
+            <Panel><div className="text-sm text-slate-400">Total Revenue</div><div className="mt-2 text-2xl font-bold text-emerald-400">{(analytics?.totalRevenue ?? 0).toLocaleString()}</div></Panel>
           </div>
           <Panel>
-            <h2 className="mb-3 text-lg font-semibold text-white">Item Performance</h2>
+            <h2 className="mb-3 text-lg font-semibold text-white">Item Performance (all markets)</h2>
             <div className="grid gap-2">
               <div className="grid grid-cols-[1.6fr_0.6fr_0.6fr_0.8fr_1.6fr] gap-2 border-b border-white/10 px-2 pb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
                 <span>Item</span><span className="text-right">Sold</span><span className="text-right">Qty</span><span className="text-right">Revenue</span><span>Suggestion</span>
               </div>
               {(analytics?.items ?? []).map((it) => (
                 <div key={it.shortname} className="grid grid-cols-[1.6fr_0.6fr_0.6fr_0.8fr_1.6fr] items-center gap-2 rounded-md border border-white/10 bg-black/20 px-2 py-2 text-sm">
-                  <div className="flex items-center gap-2 min-w-0"><ItemImg shortname={it.shortname} name={it.displayName} size={24} /><span className="truncate text-slate-200">{it.displayName}</span></div>
+                  <div className="flex min-w-0 items-center gap-2"><ItemImg shortname={it.shortname} name={it.displayName} size={24} /><span className="truncate text-slate-200">{it.displayName}</span></div>
                   <span className="text-right text-slate-300">{it.count}</span>
                   <span className="text-right text-slate-300">{it.qty}</span>
                   <span className="text-right text-emerald-400">{it.revenue.toLocaleString()}</span>
@@ -283,7 +239,7 @@ export function BlackMarketClient({ servers }: { servers: Server[] }) {
           </Panel>
           <Panel>
             <h2 className="mb-3 text-lg font-semibold text-white">Window Shoppers ({buyers?.lookers.length ?? 0})</h2>
-            <p className="mb-3 text-xs text-slate-500">Interacted with the NPC but never bought.</p>
+            <p className="mb-3 text-xs text-slate-500">Interacted with a market but never bought.</p>
             <div className="grid gap-2">
               {(buyers?.lookers ?? []).map((l) => (
                 <div key={l.steamId} className="flex items-center justify-between rounded-md border border-white/10 bg-black/20 px-3 py-2">
@@ -298,17 +254,17 @@ export function BlackMarketClient({ servers }: { servers: Server[] }) {
       )}
 
       {/* CATALOG MODAL */}
-      {catalogOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setCatalogOpen(false)}>
+      {catalogMarket != null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setCatalogMarket(null)}>
           <div className="flex max-h-[85vh] w-full max-w-3xl flex-col rounded-xl border border-white/10 bg-[#0d1117] shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
               <h2 className="text-lg font-semibold text-white">{picked ? "Configure Sale" : "Add Item — Catalog"}</h2>
-              <button onClick={() => setCatalogOpen(false)} className="text-slate-400 hover:text-white"><X className="h-4 w-4" /></button>
+              <button onClick={() => setCatalogMarket(null)} className="text-slate-400 hover:text-white"><X className="h-4 w-4" /></button>
             </div>
             {!picked ? (
               <>
                 <div className="flex flex-wrap items-center gap-2 border-b border-white/10 px-4 py-3">
-                  <div className="relative flex-1 min-w-48">
+                  <div className="relative min-w-48 flex-1">
                     <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
                     <input type="search" placeholder="Search items…" value={catSearch} onChange={(e) => setCatSearch(e.target.value)} className="w-full rounded-md border border-white/10 bg-white/[0.04] py-1.5 pl-8 pr-3 text-sm text-slate-100 placeholder-slate-500 outline-none focus:border-emerald-400" />
                   </div>
@@ -333,17 +289,10 @@ export function BlackMarketClient({ servers }: { servers: Server[] }) {
                   <div className="flex h-14 w-14 items-center justify-center rounded-md bg-white/[0.05]"><ItemImg shortname={picked.shortname} name={picked.name} size={48} /></div>
                   <div><p className="text-base font-semibold text-white">{picked.name}</p><p className="font-mono text-xs text-slate-500">{picked.shortname}</p></div>
                 </div>
-                <div className="grid gap-4 sm:grid-cols-3">
+                <div className="grid gap-4 sm:grid-cols-2">
                   <Field label="Price"><Input type="number" value={cfgPrice} onChange={(e) => setCfgPrice(e.target.value)} /></Field>
                   <Field label="Amount per purchase"><Input type="number" value={cfgAmount} onChange={(e) => setCfgAmount(e.target.value)} /></Field>
-                  <Field label="Currency">
-                    <Select value={cfgCurrency} onChange={(e) => setCfgCurrency(e.target.value)}>
-                      {CURRENCIES.some((c) => c.shortname === cfgCurrency) ? null : <option value={cfgCurrency}>{cfgCurrency}</option>}
-                      {CURRENCIES.map((c) => <option key={c.shortname} value={c.shortname}>{c.name}</option>)}
-                    </Select>
-                  </Field>
                 </div>
-                {config && cfgCurrency !== config.currencyShortname ? <p className="text-xs text-amber-500/80">Changing the currency applies to the whole shop (single shared currency).</p> : null}
                 <div className="flex flex-wrap justify-end gap-2">
                   <Button variant="secondary" onClick={() => setPicked(null)}>Back to catalog</Button>
                   <Button onClick={addFromCatalog} disabled={busy}><Plus className="h-4 w-4" />Add to Shop</Button>
@@ -354,6 +303,76 @@ export function BlackMarketClient({ servers }: { servers: Server[] }) {
         </div>
       )}
     </div>
+  );
+}
+
+function MarketCard({ market, allMarkets, busy, onSaveNpc, onSaveCurrency, onUpdateItem, onRemoveItem, onAddItem, onClone, onRemove }: {
+  market: Market;
+  allMarkets: Market[];
+  busy: boolean;
+  onSaveNpc: (name: string, showName: boolean) => void;
+  onSaveCurrency: (shortname: string, name: string) => void;
+  onUpdateItem: (item: number, price: string, amount: string, name: string) => void;
+  onRemoveItem: (item: number) => void;
+  onAddItem: () => void;
+  onClone: (dst: number) => void;
+  onRemove: () => void;
+}) {
+  const [name, setName] = useState(market.name);
+  const [showName, setShowName] = useState(market.showName);
+  const [currency, setCurrency] = useState(market.currencyShortname);
+
+  const title = market.name || `Market #${market.index}`;
+  const others = allMarkets.filter((o) => o.index !== market.index);
+
+  return (
+    <Panel>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2"><Store className="h-5 w-5 text-emerald-400" /><h2 className="text-lg font-semibold text-white">{title}</h2>
+          <span className="font-mono text-xs text-slate-500">#{market.index} · {market.x.toFixed(0)}, {market.y.toFixed(0)}, {market.z.toFixed(0)}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {others.length > 0 && (
+            <Select
+              value=""
+              onChange={(e) => { if (e.target.value !== "") { if (window.confirm(`Copy this shop into "${allMarkets.find((o) => String(o.index) === e.target.value)?.name || "Market #" + e.target.value}"? It overwrites that market's items + currency.`)) onClone(Number(e.target.value)); e.target.value = ""; } }}
+              className="py-1 text-xs"
+            >
+              <option value="">Clone this shop to…</option>
+              {others.map((o) => <option key={o.index} value={o.index}>{o.name || `Market #${o.index}`}</option>)}
+            </Select>
+          )}
+          <Button variant="danger" onClick={onRemove} disabled={busy} className="py-1 px-2 text-xs"><Trash2 className="h-3.5 w-3.5" />Remove</Button>
+        </div>
+      </div>
+
+      {/* Name + currency */}
+      <div className="mb-4 flex flex-wrap items-end gap-3">
+        <Field label="Market name"><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Smuggler's Den" className="w-56" /></Field>
+        <label className="flex items-center gap-2 pb-2 text-xs text-slate-300"><input type="checkbox" checked={showName} onChange={(e) => setShowName(e.target.checked)} />Show name on shop</label>
+        <Button variant="secondary" onClick={() => onSaveNpc(name, showName)} disabled={busy} className="py-1 px-2 text-xs"><Save className="h-3.5 w-3.5" />Save</Button>
+        <Field label="Currency">
+          <Select value={currency} onChange={(e) => setCurrency(e.target.value)} className="w-44">
+            {CURRENCIES.some((c) => c.shortname === currency) ? null : <option value={currency}>{currency}</option>}
+            {CURRENCIES.map((c) => <option key={c.shortname} value={c.shortname}>{c.name}</option>)}
+          </Select>
+        </Field>
+        <Button variant="secondary" onClick={() => { const c = CURRENCIES.find((x) => x.shortname === currency); onSaveCurrency(currency, c?.name ?? currency); }} disabled={busy} className="py-1 px-2 text-xs"><Save className="h-3.5 w-3.5" />Set</Button>
+      </div>
+
+      {/* Items */}
+      <div className="grid gap-2">
+        {market.items.map((it) => (
+          <ItemRow key={it.index} item={it} busy={busy}
+            onSave={(price, amount, nm) => onUpdateItem(it.index, price, amount, nm)}
+            onRemove={() => onRemoveItem(it.index)} />
+        ))}
+        {market.items.length === 0 ? <p className="text-sm text-slate-500">No items in this shop.</p> : null}
+      </div>
+      <div className="mt-3">
+        <Button onClick={onAddItem} disabled={busy}><Plus className="h-4 w-4" />Add Item from Catalog</Button>
+      </div>
+    </Panel>
   );
 }
 
@@ -373,27 +392,6 @@ function ItemRow({ item, busy, onSave, onRemove }: {
       <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-20 py-1 text-xs" />
       <Button variant="secondary" onClick={() => onSave(price, amount, name)} disabled={busy} className="py-1 px-2 text-xs"><Save className="h-3.5 w-3.5" />Save</Button>
       <Button variant="danger" onClick={onRemove} disabled={busy} className="py-1 px-2 text-xs"><Trash2 className="h-3.5 w-3.5" /></Button>
-    </div>
-  );
-}
-
-function NpcRow({ npc, busy, onSave, onRemove }: {
-  npc: Npc; busy: boolean;
-  onSave: (name: string, showName: boolean) => void;
-  onRemove: () => void;
-}) {
-  const [name, setName] = useState(npc.name);
-  const [showName, setShowName] = useState(npc.showName);
-  return (
-    <div className="flex flex-wrap items-center gap-3 rounded-md border border-white/10 bg-black/20 px-3 py-2">
-      <span className="font-mono text-xs text-slate-500">#{npc.index} — {npc.x.toFixed(0)}, {npc.y.toFixed(0)}, {npc.z.toFixed(0)}</span>
-      <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Market name (e.g. Smuggler's Den)" className="w-56 py-1 text-xs" />
-      <label className="flex items-center gap-2 text-xs text-slate-300">
-        <input type="checkbox" checked={showName} onChange={(e) => setShowName(e.target.checked)} />
-        Show name on shop
-      </label>
-      <Button variant="secondary" onClick={() => onSave(name, showName)} disabled={busy} className="py-1 px-2 text-xs"><Save className="h-3.5 w-3.5" />Save</Button>
-      <Button variant="danger" onClick={onRemove} disabled={busy} className="py-1 px-2 text-xs"><Trash2 className="h-3.5 w-3.5" />Remove</Button>
     </div>
   );
 }

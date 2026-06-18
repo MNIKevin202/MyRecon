@@ -16,7 +16,7 @@
     ]
   },
   "black-market": {
-    "version": "1.1.0",
+    "version": "1.2.0",
     "contentUrl": "https://raw.githubusercontent.com/MNIKevin202/MyRecon/main/plugins/MyRconBlackMarket.cs",
     "name": "Black Market",
     "description": "Interactable Black Market NPC shop. Place an invincible, non-combat vendor NPC; players press USE to open a shop and buy items with scrap.",
