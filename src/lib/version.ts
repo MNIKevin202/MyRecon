@@ -1,2 +1,2 @@
-export const APP_VERSION = "0.1.84";
-export const BUILD_STAMP = "2026-06-18-black-market-signs";
+export const APP_VERSION = "0.1.85";
+export const BUILD_STAMP = "2026-06-18-sign-custom-image";
