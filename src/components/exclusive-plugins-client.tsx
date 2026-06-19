@@ -371,7 +371,8 @@ function PluginCard({
   const canUninstall     = !!server?.sftpEnabled;
   const installedVersion = installedVersions[serverId];
   const isInstalled      = !!installedVersion;
-  const hasUpdate        = isInstalled && installedVersion !== plugin.version;
+  // "installed" is a sentinel for "present but version unknown" — never an update
+  const hasUpdate        = isInstalled && installedVersion !== "installed" && installedVersion !== plugin.version;
 
   async function install() {
     if (!serverId || !canInstall) return;
@@ -483,7 +484,7 @@ function PluginCard({
               >
                 {servers.map((s) => {
                   const iv = installedVersions[s.id];
-                  const upd = iv && iv !== plugin.version;
+                  const upd = iv && iv !== "installed" && iv !== plugin.version;
                   return (
                     <option key={s.id} value={s.id} disabled={!s.sftpEnabled}>
                       {s.name}{!s.sftpEnabled ? " (SFTP off)" : ""}{iv ? (upd ? " ⚠" : " ✓") : ""}
@@ -681,15 +682,25 @@ export function ExclusivePluginsClient({
 
   const [tab, setTab] = useState<"download" | "installed" | "updates">("download");
 
-  // Build merged install map for all plugins
+  // Build merged install map for all plugins.
+  // Source of truth is the real server check (the actual .cs version on each
+  // server). We intentionally do NOT use the local appSetting record for
+  // version/update status — it's per-machine and goes stale (e.g. after moving
+  // to another machine), which made up-to-date servers show false "updates".
+  // For servers not yet checked, fall back to the local record only to mark a
+  // plugin as installed (using a sentinel that never reads as an update).
   function mergedVersions(pluginId: string) {
-    const base    = installedOn[pluginId] ?? {};
-    const merged: Record<string, string> = { ...base };
-    // Servers we've actually checked are authoritative: set or clear per real state
+    const merged: Record<string, string> = {};
+    // Real, authoritative per-server versions
     for (const sid of checkedServers) {
       const real = realInstalled[sid]?.[pluginId];
       if (real) merged[sid] = real;
-      else delete merged[sid];
+    }
+    // Servers we couldn't check yet: show as installed if a local record exists,
+    // but never flag an update for them (avoid false positives from stale data).
+    const base = installedOn[pluginId] ?? {};
+    for (const sid of Object.keys(base)) {
+      if (!checkedServers.has(sid) && !(sid in merged)) merged[sid] = "installed";
     }
     // Optimistic local overrides (just installed/uninstalled this session)
     Object.assign(merged, localVersions[pluginId] ?? {});
@@ -705,7 +716,7 @@ export function ExclusivePluginsClient({
       : plugin;
     const isInstalledAnywhere = Object.keys(mv).length > 0;
     const hasUpdate = isInstalledAnywhere &&
-      Object.values(mv).some((v) => v !== livePlugin.version);
+      Object.values(mv).some((v) => v !== "installed" && v !== livePlugin.version);
     return { plugin: livePlugin, mv, isInstalledAnywhere, hasUpdate };
   });
 
