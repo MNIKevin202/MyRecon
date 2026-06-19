@@ -691,16 +691,12 @@ export function ExclusivePluginsClient({
   // plugin as installed (using a sentinel that never reads as an update).
   function mergedVersions(pluginId: string) {
     const merged: Record<string, string> = {};
-    // Real, authoritative per-server versions
+    // Real, authoritative per-server versions (plugin management requires SFTP/FTP,
+    // so the actual file on the server is the only source of truth — no stale
+    // per-machine records).
     for (const sid of checkedServers) {
       const real = realInstalled[sid]?.[pluginId];
       if (real) merged[sid] = real;
-    }
-    // Servers we couldn't check yet: show as installed if a local record exists,
-    // but never flag an update for them (avoid false positives from stale data).
-    const base = installedOn[pluginId] ?? {};
-    for (const sid of Object.keys(base)) {
-      if (!checkedServers.has(sid) && !(sid in merged)) merged[sid] = "installed";
     }
     // Optimistic local overrides (just installed/uninstalled this session)
     Object.assign(merged, localVersions[pluginId] ?? {});
@@ -775,6 +771,16 @@ export function ExclusivePluginsClient({
           Console {showConsole ? "On" : "Off"}
         </button>
       </div>
+
+      {/* SFTP/FTP requirement notice */}
+      {servers.some((s) => !s.sftpEnabled) && (
+        <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
+          <span className="font-semibold">Plugin management requires SFTP or FTP.</span>{" "}
+          Enable it in Server Settings for:{" "}
+          {servers.filter((s) => !s.sftpEnabled).map((s) => s.name).join(", ")}.
+          Without it, MyRcon can&apos;t install, verify, or update plugins on that server.
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-white/[0.06]">
